@@ -98,14 +98,14 @@ my $outFName="beers_".$thisCrawl->{startTime}.".tmp";
 open( my $outfile, ">",$outFName); 
 $fh->print($outfile);
 close $outfile;
-$logger->info("file written to disk");
+$logger->info("file $outFName  written to disk from the db");
 if( ! defined $thisCrawl->{rowsTotal} ){
   $logger->info("No file length specified in the db. Counting..");
   my $lines=0;
   open(my $readBeers, "<", $outFName);
   $lines++ while(<$readBeers>);
   close $readBeers;
-  $logger->info("lines #: $lines");
+  $logger->info("lines in $outFName#: $lines");
   $thisCrawl->{rowsTotal}=$lines;
 }
 $crawls->update( {"id"=>$crawlId}, $thisCrawl);
@@ -129,7 +129,7 @@ while(<$readBeers>){
   $ss=~s/ /-/g;
   my $brewery=decode_entities($row[3]); #brewery
   $brewery=~s/^\s+|\s+$//g;
-  say "id: $rbId beer: $bName ss: $ss brewery: $brewery";
+  say "id: $rbId beer: $bName search string: $ss brewery: $brewery";
   $c++;
   #file line already parsed, let's go to RB :]
 #  $self->getDataFromRB($ss,$rbId,$c);
