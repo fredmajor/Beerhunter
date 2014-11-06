@@ -1,0 +1,1 @@
+{"virtualbox":{"/srv":{"guestpath":"/srv","hostpath":"/Users/walkingdude/Documents/projects/Beerhunter/infra/salt/roots","disabled":false},"/vagrant":{"guestpath":"/vagrant","hostpath":"/Users/walkingdude/Documents/projects/Beerhunter/infra","disabled":false}}}
