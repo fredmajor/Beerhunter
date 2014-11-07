@@ -3,6 +3,7 @@ use utf8;
 use threads;
 use Thread::Queue;
 use Thread;
+use threads::shared;
 use File::Copy;
 use Text::Iconv;
 use FindBin;
@@ -24,8 +25,11 @@ use lib $FindBin::Bin;
 my $mongoUrl="dev.beerhunter.pl";
 my $mongoPort=27017;
 my $urlQ=Thread::Queue->new();
+my $respQ=Thread::Queue->new();
 our $baseUrl=q(http://www.ratebeer.com);
-our $crawlStartTime;
+our $crawlStartTime: shared;
+our $badLinks: shared;
+our $crawlCounter: shared;
 
 Log::Log4perl::init_and_watch('../log4perl.conf',20);
 my $logger = Log::Log4perl->get_logger('Beerhunter.Crawlers.KikCrawler');
@@ -120,8 +124,12 @@ $logger->info("Crawl metadata updated");
 
 open(my $readBeers, "<", $outFName);
 require "RateBeerCrawl.pm";
-my $crawlEngine=Beerhunter::BeerData::RateBeerCrawl->new();
-$crawlStartTime=time;
+{
+  lock $crawlStartTime;
+  $crawlStartTime=time;
+}
+&startUrlHandlers();
+$logger->info("Starting dispatching loop");
 while(<$readBeers>){
   while($urlQ->pending>200){
     sleep(5);
@@ -147,7 +155,6 @@ sub prepareLink{
   $ss=~s/ /-/g;
   my $brewery=decode_entities($row[3]); #brewery
   $brewery=~s/^\s+|\s+$//g;
-  # say "id: $rbId beer: $bName search string: $ss brewery: $brewery";
   my $url=$baseUrl . '/beer/';
   $ss=~s/\.//g;
   $ss=~s/://g;
@@ -208,6 +215,28 @@ sub getBeersFile{
     $logger->info("converted and prepared");
   }
   return ($extractedBeerList, $counter);
+}
+
+sub startUrlHandlers{
+  for (my $i=0; $i< $workers; $i++){
+    my $worker = threads->create(\&urlHandler);
+    $logger->info("Detaching worker # $i");
+    $worker->detach;
+  }
+  return 1;
+}
+
+sub urlHandler{
+  my $crawlEngine=Beerhunter::BeerData::RateBeerCrawl->new();
+  while(1){
+    my $url = $urlQ->dequeue();
+    my $res = $crawlEngine->getDataFromRB($url);
+    if($res == -1){
+      $logger->warn("Unable to get data from $url");
+    }else{
+      $respQ->enqueue($res);
+    }
+  }
 }
 
 sub getTimestamp{

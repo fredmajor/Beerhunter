@@ -1,5 +1,6 @@
 package Beerhunter::BeerData::RateBeerCrawl 0.01{
   use 5.018;
+  use utf8;
   use Data::Dumper;
   use LWP::Simple;
   use JSON;
@@ -13,7 +14,6 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
   Log::Log4perl::init_and_watch('../log4perl.conf',20);
   my $logger = Log::Log4perl->get_logger('Beerhunter.Crawlers.KikCrawler');
   our $baseUrl=q(http://www.ratebeer.com);
-  our $badLinks=0;
 
   sub new{
     my ($class, @args) = @_;
@@ -34,12 +34,7 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
       return  $bData;
     }else{
       $logger->warn("Unable to GET the data for $url");
-      open(my $badUrlFile, '>>', "badUrls.tmp") or die;
-      select((select($badUrlFile),$|=1)[0]);
-      print $badUrlFile "$url \n"; 
-      close $badUrlFile;
-      $badLinks++;
-      return 1;
+      return -1;
     }
   }
 
@@ -48,8 +43,8 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
     my @files = qw/ grut.html doubleTrouble.html/;
     #my @files = qw/ doubleTrouble.html/;
     foreach my $fname(@files){
-      say"------------------";
-      say "file is $fname";
+      $logger->info("------------------");
+      $logger->info( "file is $fname");
       my $wholeFile;
       {
         local $/=undef;
