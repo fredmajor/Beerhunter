@@ -1,7 +1,14 @@
 use 5.018;
+use utf8;
+use threads;
+use Thread::Queue;
+use Thread;
+use File::Copy;
+use Text::Iconv;
+use FindBin;
+use Encode qw(from_to);
 use Time::HiRes qw/time/;
 use HTML::Entities;
-no warnings 'utf8';
 use IO::File;
 use Data::Dumper;
 use LWP::Simple;
@@ -12,9 +19,13 @@ use Log::Log4perl;
 use POSIX;
 use Archive::Zip qw(:ERROR_CODES :CONSTANTS);
 use MongoDB::GridFS;
+use lib $FindBin::Bin;
 
 my $mongoUrl="dev.beerhunter.pl";
 my $mongoPort=27017;
+my $urlQ=Thread::Queue->new();
+our $baseUrl=q(http://www.ratebeer.com);
+our $crawlStartTime;
 
 Log::Log4perl::init_and_watch('../log4perl.conf',20);
 my $logger = Log::Log4perl->get_logger('Beerhunter.Crawlers.KikCrawler');
@@ -44,12 +55,13 @@ if(!defined $lastCrawlId){
   $lastCrawlId=-1;
 }
 
-#remove all beer data already crawled from RB and stored
+#this can't be like this!!! I gotta be replacing beers one-by one. To avoid havaing empty db.
 if($rescan){
   &clearBeerData;
 }
 
-
+########################################
+# now I have crawlId. 
 my $crawlId;
 if($newscan){
   $crawlId=++$lastCrawlId;
@@ -79,18 +91,19 @@ $thisCrawl->{workers}=$workers if ! defined $thisCrawl->{workers};
 $thisCrawl->{completed}=0 if ! defined $thisCrawl->{completed};
 $thisCrawl->{rowsDone}=0 if ! defined $thisCrawl->{rowsDone};
 if(! defined $thisCrawl->{beerFile}){
-  my $bFName = &getBeersFile();
-  $logger->info("Got beer file. fname is $bFName");
+  my ($bFName, $lineCounter) = &getBeersFile();
+  $logger->info("Got beer file. fname is $bFName. I will insert this file into db");
+  $logger->info("Lines in the beerfile: $lineCounter");
   my $grid=$beerDb->get_gridfs;
-  #open(my $fh,"< :encoding(UTF-16)", $bFName) or die $!;
   my $fh = IO::File->new($bFName, "r");
   my $bid = $grid->insert($fh);
   $logger->info("inserted file to db");
   $thisCrawl->{beerFile}=$bid;
-#  unlink $bFName;
+  $thisCrawl->{rowsTotal}=$lineCounter;
+  unlink $bFName;
 }
 
-#handle the beerfile
+#get the beerfile from the db. it's already good to go
 my $grid=$beerDb->get_gridfs;
 my $fh = $grid->get($thisCrawl->{beerFile});
 $logger->info("Got beer file from the db");
@@ -98,26 +111,31 @@ my $outFName="beers_".$thisCrawl->{startTime}.".tmp";
 open( my $outfile, ">",$outFName); 
 $fh->print($outfile);
 close $outfile;
+#here the beerfile from the db is already saved from the db to local drive
 $logger->info("file $outFName  written to disk from the db");
-if( ! defined $thisCrawl->{rowsTotal} ){
-  $logger->info("No file length specified in the db. Counting..");
-  my $lines=0;
-  open(my $readBeers, "<", $outFName);
-  $lines++ while(<$readBeers>);
-  close $readBeers;
-  $logger->info("lines in $outFName#: $lines");
-  $thisCrawl->{rowsTotal}=$lines;
-}
 $crawls->update( {"id"=>$crawlId}, $thisCrawl);
+$logger->info("Crawl metadata updated");
 ########
 ### metadata ready, record updated. Start crawling..
 
-my $baseUrl=q(http://www.ratebeer.com);
 open(my $readBeers, "<", $outFName);
-my $c=0;
-my $startTime=time;
-my $badLinks=0;
+require "RateBeerCrawl.pm";
+my $crawlEngine=Beerhunter::BeerData::RateBeerCrawl->new();
+$crawlStartTime=time;
 while(<$readBeers>){
+  while($urlQ->pending>200){
+    sleep(5);
+  }
+  $urlQ->enqueue($_);
+  # $logger->info("Done $c links in $elasped s. Speed: ".substr($speed,0,5). "(url/s). Bad links: ".$badLinks);
+}
+unlink $outFName; #file which contained crawled links
+$logger->info("Removed $outFName from local drive.");
+
+######################################################################
+######################################################################
+
+sub prepareLink{
   s/\r?\n$//;
   my @row = split /\t/;
   my $rbId=decode_entities($row[0]); #rb id
@@ -129,47 +147,67 @@ while(<$readBeers>){
   $ss=~s/ /-/g;
   my $brewery=decode_entities($row[3]); #brewery
   $brewery=~s/^\s+|\s+$//g;
-  say "id: $rbId beer: $bName search string: $ss brewery: $brewery";
-  $c++;
-  #file line already parsed, let's go to RB :]
-#  $self->getDataFromRB($ss,$rbId,$c);
-  my $elasped=time - $startTime;
-  my $speed=$c/$elasped;
-  $logger->info("Done $c links in $elasped s. Speed: ".substr($speed,0,5). "(url/s). Bad links: ".$badLinks);
+  # say "id: $rbId beer: $bName search string: $ss brewery: $brewery";
+  my $url=$baseUrl . '/beer/';
+  $ss=~s/\.//g;
+  $ss=~s/://g;
+  $ss=~s/%//g;
+  $ss=~s/\*//g;
+  $ss=~s/<//g;
+  $ss=~s/>//g;
+  $url=$url.$ss."/".$rbId."/";
+  $url =~ s/[^[:ascii:]]//g;
+  $url =~ s/\(|\)|\&//g;
+  return $url;
 }
 
-
-
-unlink $outFName;
-$logger->info("Removed $outFName from local drive.");
-
-######################################################################
-######################################################################
 #temporary won't download new file!!!
+## this sub downloads a zip, extraxts the beerlist and converts it to utf-8.
+## removes all the garbage, leaving only the txt file in the dir
 sub getBeersFile{
   my $beerListUrl=q(http://www.ratebeer.com/documents/downloads/beers.zip);
-  my $beerFile="berrList.zip";
-#  unlink  $beerFile;
+  my $beerZipFile="berrList.zip";
+  my $extractedBeerList;
+  my $counter=0;
 
-  $logger->info("Downloading beer list.");
-#  getstore($beerListUrl, $beerFile);
-  $logger->info("Beer list downloaded.");
-
-  my $zippo = Archive::Zip->new;
-
-  unless ( $zippo->read( $beerFile ) == AZ_OK ) {
-    $logger->error("Can't open the zip file: $beerFile");
-    die 'read error';
+  { 
+    #download zip and extract
+#  unlink  $beerZipFile;
+    $logger->info("Downloading beer list.");
+#  getstore($beerListUrl, $beerZipFile);
+    $logger->info("Zipped beer list downloaded.");
+    my $zippo = Archive::Zip->new;
+    unless ( $zippo->read( $beerZipFile ) == AZ_OK ) {
+      $logger->error("Can't open the zip file: $beerZipFile");
+      die 'read error';
+    }
+    my @members = $zippo->memberNames;
+    $extractedBeerList=$members[0];
+    unlink $extractedBeerList;
+    $logger->info("File with list is named: $extractedBeerList. Extracting from archive..");
+    $zippo->extractMember($extractedBeerList);
+#    unlink $beerZipFile;
+    $logger->info("Beer list extracted");
   }
-  $logger->info("Beer list unzipped");
-  my @members = $zippo->memberNames;
-  my $listFName=$members[0];
-  unlink $listFName;
-  $logger->info("File with list is named: $listFName. Extracting from archive..");
-  $zippo->extractMember($listFName);
-  $logger->info("Beer list extracted");
-#  unlink $beerFile;
-  return $listFName;
+
+  {
+    #convert and prepare ready links.....
+    $logger->info("Converting beer list to utf-8 and preparing ready links..");
+    open(my $fin,"< :raw :encoding(UTF-16LE) :crlf", $extractedBeerList) or die $!;
+    my $tmpList="beersConverted.tmp";
+    open (my $fout, "> :encoding(UTF-8)", $tmpList);
+    $logger->info( "starting conversion loop");
+    while(<$fin>){
+      s/\r?\n$//; #windows-style chomp
+      print $fout &prepareLink($_)."\n";
+      $counter++;
+    }
+    close $fin;
+    close $fout;
+    move($tmpList, $extractedBeerList);
+    $logger->info("converted and prepared");
+  }
+  return ($extractedBeerList, $counter);
 }
 
 sub getTimestamp{

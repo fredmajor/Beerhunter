@@ -3,16 +3,12 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
   use Data::Dumper;
   use LWP::Simple;
   use JSON;
-  use Getopt::Long;
   use Log::Log4perl;
-  use POSIX qw(strftime);
-  use WWW::Mechanize;
   use HTML::Entities;
   use Encode;
   use URI::Escape;
   use HTML::TreeBuilder::XPath;
   use HTML::Tidy;
-  no warnings 'utf8';
 
   Log::Log4perl::init_and_watch('../log4perl.conf',20);
   my $logger = Log::Log4perl->get_logger('Beerhunter.Crawlers.KikCrawler');
@@ -24,67 +20,26 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
     return bless {}, $class;
   }
 
-  #reads from a file and gets the data
-  sub handleBeers{
-    my $self = shift;
-    open(my $fh,"< :encoding(UTF-16)", "beers.txt") or die $!;
-    my @beerData;
-    my $c=0;
-    my $startTime=time;
-    while (<$fh>) {
-      s/\r?\n$//;
-      my @row = split /\t/;
-      my $rbId=decode_entities($row[0]); #rb id
-      $rbId=~s/^\s+|\s+$//g;
-      my $bName=decode_entities($row[1]); #beer name
-      $bName=~s/^\s+|\s+$//g;
-      #my $ss=Encode::decode('utf8', uri_unescape($row[2]));
-      my $ss=lc($bName); #search string
-      $ss=~s/^\s+|\s+$//g;
-      $ss=~s/ /-/g;
-      my $brewery=decode_entities($row[3]); #brewery
-      $brewery=~s/^\s+|\s+$//g;
-      #say "id: $rbId beer: $bName ss: $ss brewery: $brewery";
-      $c++;
-      #file line already parsed, let's go to RB :]
-      $self->getDataFromRB($ss,$rbId,$c);
-      my $elasped=time - $startTime;
-      my $speed=$c/$elasped;
-      $logger->info("Done $c links in $elasped s. Speed: ".substr($speed,0,5). "(url/s). Bad links: ".$badLinks);
-    }
-    $logger->info("Processing done");
-    close $fh;
-    return 1;
-  }
-
   #handles one particular beer
   sub getDataFromRB{
     my $self = shift;
-    my ($strPath, $id,$c) = @_;
-    my $url=$baseUrl . '/beer/';
-    $strPath=~s/\.//g;
-    $strPath=~s/://g;
-    $strPath=~s/%//g;
-    $strPath=~s/\*//g;
-    $strPath=~s/<//g;
-    $strPath=~s/>//g;
-    $url=$url.$strPath."/".$id."/";
-    $url =~ s/[^[:ascii:]]//g;
-    $url =~ s/\(|\)|\&//g;
+    my $url=shift;
     $logger->info("-------------------------------");
-    $logger->info("$c: Querying $url");
+    $logger->info("Querying $url");
     my $beertml=get($url);
     if(defined $beertml){
       $logger->info("GET done");
-      $self->parseData($beertml);
-      $logger->info("Crawled $c");
+      my $bData=$self->parseData($beertml);
+      $logger->info("Crawled $url");
+      return  $bData;
     }else{
       $logger->warn("Unable to GET the data for $url");
-      open(my $badUrlFile, '>>', "badUrls") or die;
+      open(my $badUrlFile, '>>', "badUrls.tmp") or die;
       select((select($badUrlFile),$|=1)[0]);
       print $badUrlFile "$url \n"; 
       close $badUrlFile;
       $badLinks++;
+      return 1;
     }
   }
 
@@ -236,16 +191,32 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
     $logger->info("Img link:  $imgLink") if defined $imgLink;
     $logger->info("Origin is:  $origin") if defined $origin;
 
-
     $tree->delete();
+
+    my %beer;
+    $beer{name}=$title;
+    $beer{brewery}=$brewery;
+    $beer{breweryLink}=$breweryLink;
+    $beer{style}=$style;
+    $beer{styleLink}=$styleLink;
+    $beer{overallMark}=$overallMark;
+    $beer{styleMark}=$styleMark;
+    $beer{abv}=$abv;
+    $beer{ratings}=$ratings;
+    $beer{seasonal}=$seasonal;
+    $beer{calories}=$calories;
+    $beer{weightedAvg}=$weightedAvg;
+    $beer{desc}=$desc;
+    $beer{imgLink}=$imgLink;
+    $beer{origin}=$origin;
+    return \%beer;
   }
 
   #main entry routine
-
   #&test;
   #handleBeers;
-  my $crawler = Beerhunter::BeerData::RateBeerCrawl->new;
+  #my $crawler = Beerhunter::BeerData::RateBeerCrawl->new;
   #$crawler->test;
-  $crawler->handleBeers;
-
+  #$crawler->handleBeers;
+  1;
 }
