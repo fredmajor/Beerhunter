@@ -4,19 +4,46 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
   use Data::Dumper;
   use LWP::Simple;
   use JSON;
-  use Log::Log4perl;
+  use Log::Log4perl qw(:easy);
   use HTML::Entities;
   use Encode;
   use URI::Escape;
   use HTML::TreeBuilder::XPath;
   use HTML::Tidy;
 
-  Log::Log4perl::init_and_watch('../log4perl.conf',20);
-  my $logger = Log::Log4perl->get_logger('Beerhunter.Crawlers.KikCrawler');
-  our $baseUrl=q(http://www.ratebeer.com);
+  our $logger;
+
+  our  $logconf = qq(
+  log4perl.category                   = WARN, Syncer, SyncerC
+
+  # File appender (unsynchronized)
+  log4perl.appender.Logfile           = Log::Log4perl::Appender::File
+  log4perl.appender.Logfile.autoflush = 1
+  log4perl.appender.Logfile.utf8      = 1
+  log4perl.appender.Logfile.filename  = rateBeerCrawl.log
+  log4perl.appender.Logfile.mode      = truncate
+  log4perl.appender.Logfile.layout    = PatternLayout
+  log4perl.appender.Logfile.layout.ConversionPattern    = %5p (%F:%L) - %m%n
+
+  # Synchronizing appender, using the file appender above
+  log4perl.appender.Syncer            = Log::Log4perl::Appender::Synchronized
+  log4perl.appender.Syncer.appender   = Logfile
+
+  log4perl.appender.stdout=Log::Log4perl::Appender::Screen
+  log4j.appender.stdout.layout=SimpleLayout
+  log4j.appender.stdout.utf8=1
+  log4perl.appender.SyncerC            = Log::Log4perl::Appender::Synchronized
+  log4perl.appender.SyncerC.appender   = stdout
+
+  log4perl.logger.Beerhunter.BeerData=DEBUG
+log4perl.logger.Beerhunter.RateBeerMaster=DEBUG
+  );
+
 
   sub new{
     my ($class, @args) = @_;
+    Log::Log4perl::init(\$logconf);
+    $logger = Log::Log4perl->get_logger('Beerhunter.BeerData.RateBeerCrawl');
     return bless {}, $class;
   }
 
@@ -24,36 +51,12 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
   sub getDataFromRB{
     my $self = shift;
     my $url=shift;
+    my $text = shift;
     $logger->info("-------------------------------");
-    $logger->info("Querying $url");
-    my $beertml=get($url);
-    if(defined $beertml){
-      $logger->info("GET done");
-      my $bData=$self->parseData($beertml);
-      $logger->info("Crawled $url");
-      return  $bData;
-    }else{
-      $logger->warn("Unable to GET the data for $url");
-      return -1;
-    }
-  }
-
-  sub test{
-    my $self = shift;
-    my @files = qw/ grut.html doubleTrouble.html/;
-    #my @files = qw/ doubleTrouble.html/;
-    foreach my $fname(@files){
-      $logger->info("------------------");
-      $logger->info( "file is $fname");
-      my $wholeFile;
-      {
-        local $/=undef;
-        open(my $fh, $fname) or die $!;
-        $wholeFile=<$fh>;
-        close $fh;
-      }
-      $self->parseData($wholeFile);
-    }
+    $logger->info("Parsing $url");
+    my $bData=$self->parseData($text);
+    $logger->info("Parsed $url");
+    return  $bData;
   }
 
   sub parseData{
@@ -207,11 +210,5 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
     return \%beer;
   }
 
-  #main entry routine
-  #&test;
-  #handleBeers;
-  #my $crawler = Beerhunter::BeerData::RateBeerCrawl->new;
-  #$crawler->test;
-  #$crawler->handleBeers;
   1;
 }

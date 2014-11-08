@@ -1,13 +1,10 @@
 use 5.018;
 use utf8;
 use threads;
-use Thread::Queue;
-use Thread;
 use threads::shared;
+use Thread::Queue;
 use File::Copy;
-use Text::Iconv;
 use FindBin;
-use Encode qw(from_to);
 use Time::HiRes qw/time/;
 use HTML::Entities;
 use IO::File;
@@ -20,19 +17,48 @@ use Log::Log4perl;
 use POSIX;
 use Archive::Zip qw(:ERROR_CODES :CONSTANTS);
 use MongoDB::GridFS;
+use LWP::Parallel::UserAgent;
+use HTTP::Request;
 use lib $FindBin::Bin;
+require "RateBeerCrawl.pm";
 
 my $mongoUrl="dev.beerhunter.pl";
 my $mongoPort=27017;
-my $urlQ=Thread::Queue->new();
-my $respQ=Thread::Queue->new();
 our $baseUrl=q(http://www.ratebeer.com);
 our $crawlStartTime: shared;
-our $badLinks: shared;
-our $crawlCounter: shared;
+our $badLinks :shared=0;
+our $crawlCounter :shared =0;
+our $respQ = Thread::Queue->new();
+our $requestsPerBatch=10;
 
-Log::Log4perl::init_and_watch('../log4perl.conf',20);
-my $logger = Log::Log4perl->get_logger('Beerhunter.Crawlers.KikCrawler');
+my $logconf = qq(
+log4perl.category                   = WARN, Syncer, SyncerC
+
+# File appender (unsynchronized)
+log4perl.appender.Logfile           = Log::Log4perl::Appender::File
+log4perl.appender.Logfile.autoflush = 1
+log4perl.appender.Logfile.utf8      = 1
+log4perl.appender.Logfile.filename  = rateBeerMaster.log
+log4perl.appender.Logfile.mode      = truncate
+log4perl.appender.Logfile.layout    = PatternLayout
+log4perl.appender.Logfile.layout.ConversionPattern    = %5p (%F:%L) - %m%n
+
+# Synchronizing appender, using the file appender above
+log4perl.appender.Syncer            = Log::Log4perl::Appender::Synchronized
+log4perl.appender.Syncer.appender   = Logfile
+
+log4perl.appender.stdout=Log::Log4perl::Appender::Screen
+log4j.appender.stdout.layout=SimpleLayout
+log4j.appender.stdout.utf8=1
+log4perl.appender.SyncerC            = Log::Log4perl::Appender::Synchronized
+log4perl.appender.SyncerC.appender   = stdout
+
+log4perl.logger.Beerhunter.RateBeerMaster=DEBUG
+log4perl.logger.Beerhunter.BeerData=DEBUG
+);
+
+Log::Log4perl::init(\$logconf);
+my $logger = Log::Log4perl->get_logger('Beerhunter.RateBeerMaster');
 
 my $rescan; #if set, old beer data will be removed from the db
 my $newscan; #if set, new crawling will be started, even if the previous one has not been completed
@@ -119,29 +145,101 @@ close $outfile;
 $logger->info("file $outFName  written to disk from the db");
 $crawls->update( {"id"=>$crawlId}, $thisCrawl);
 $logger->info("Crawl metadata updated");
-########
 ### metadata ready, record updated. Start crawling..
+################################################
 
-open(my $readBeers, "<", $outFName);
-require "RateBeerCrawl.pm";
-{
-  lock $crawlStartTime;
-  $crawlStartTime=time;
-}
-&startUrlHandlers();
+open(my $readBeers, "<", $outFName) or die;
+$logger->info("opened $outFName for reading");
 $logger->info("Starting dispatching loop");
+my $pua = LWP::Parallel::UserAgent->new();
+$pua->in_order  (0);  # handle requests in order of registration
+$pua->duplicates(0);  # ignore duplicates
+$pua->timeout   (22);  # in seconds
+$pua->redirect  (1);  # follow redirects
+
+my @requestsPool;
+&initParsingEngine();
+$crawlStartTime=time;
 while(<$readBeers>){
-  while($urlQ->pending>200){
-    sleep(5);
+  push @requestsPool, (HTTP::Request->new('GET', $_));
+  my $arrSize = @requestsPool;
+
+  if($arrSize >=  $requestsPerBatch || eof){
+    $logger->info("gathered $requestsPerBatch requests. handling...");
+    foreach my $req (@requestsPool){
+      $logger->info("Registering ".$req->url);
+      if ( my $res = $pua->register ($req) ) { 
+        $logger-warn($res->error_as_HTML); 
+      }  
+    }
+    my $entries = $pua->wait();
+    @requestsPool=();
+    $logger->info("handled $requestsPerBatch requests");
+
+    #parse results
+    foreach (keys %$entries){
+      my $res = $entries->{$_}->response;
+      my $url = $res->request->url;
+      my $content = $res->content;
+      my $code = $res->code;
+      {
+        lock $crawlCounter;
+        $crawlCounter++;
+      }
+      if($code != 200){
+        $logger->warn("unable to get the data from: $url");
+        {
+          lock $badLinks;
+          $badLinks++;
+        }
+        next;
+      }
+      my $toQ={ "url"=>$url, "content"=>$content};
+      $respQ->enqueue($toQ);
+    }
   }
-  $urlQ->enqueue($_);
-  # $logger->info("Done $c links in $elasped s. Speed: ".substr($speed,0,5). "(url/s). Bad links: ".$badLinks);
+
 }
 unlink $outFName; #file which contained crawled links
 $logger->info("Removed $outFName from local drive.");
 
 ######################################################################
 ######################################################################
+sub initParsingEngine{
+  my $worker=threads->create(\&handleResponses);
+  $logger->info("Detaching parsing thread...");
+  $worker->detach;
+  $logger->info("Detached  parsing thread...");
+}
+
+sub handleResponses{
+  my $parser = Beerhunter::BeerData::RateBeerCrawl->new(); 
+  while(1){
+    my $toQ= $respQ->dequeue();
+    my $urlRef = ($toQ->{url});
+    my $url = $$urlRef;
+    say ($url);
+    my $content = $toQ->{content};
+    my $beerHashRef=$parser->getDataFromRB($url, $content);
+    my $localBadLinks;
+    my $localCrawlCounter;
+    my $elapsed;
+    {
+      lock $crawlStartTime;
+      $elapsed = time - $crawlStartTime;
+    }
+    {
+      lock $badLinks;
+      $localBadLinks=$badLinks;
+    }
+    {
+      lock $crawlCounter;
+      $localCrawlCounter = $crawlCounter;
+    }
+    my $speed=$localCrawlCounter/$elapsed;
+    $logger->info("Done $localCrawlCounter links in". substr($elapsed,0,7). " s. Speed: ".substr($speed,0,5). "(url/s). Bad links: ".$localBadLinks);
+  }
+}
 
 sub prepareLink{
   s/\r?\n$//;
@@ -217,27 +315,6 @@ sub getBeersFile{
   return ($extractedBeerList, $counter);
 }
 
-sub startUrlHandlers{
-  for (my $i=0; $i< $workers; $i++){
-    my $worker = threads->create(\&urlHandler);
-    $logger->info("Detaching worker # $i");
-    $worker->detach;
-  }
-  return 1;
-}
-
-sub urlHandler{
-  my $crawlEngine=Beerhunter::BeerData::RateBeerCrawl->new();
-  while(1){
-    my $url = $urlQ->dequeue();
-    my $res = $crawlEngine->getDataFromRB($url);
-    if($res == -1){
-      $logger->warn("Unable to get data from $url");
-    }else{
-      $respQ->enqueue($res);
-    }
-  }
-}
 
 sub getTimestamp{
   strftime("%Y-%m-%d_%H-%M-%S", localtime);
