@@ -25,11 +25,13 @@ require "RateBeerCrawl.pm";
 my $mongoUrl="dev.beerhunter.pl";
 my $mongoPort=27017;
 our $baseUrl=q(http://www.ratebeer.com);
+my $syncPeriod=120; #will make sure that all responses are parsed and persisted in DB every at most 120s
+
+#more public stuff
 our $crawlStartTime;
 our $respQ = Thread::Queue->new();
 our $badLinks=0;
 our $downloadCounter=0;
-my $syncPeriod=120; #will make sure that all responses are parsed and persisted in DB every at most 120s
 our $parsersNo:shared =0;
 
 my $logconf = qq(
@@ -65,9 +67,10 @@ my $logger = Log::Log4perl->get_logger('Beerhunter.RateBeerMaster');
 #if last scan has been completed, starts a new one.
 my $rescan; #if set, it will query for all the beers. If not, it will query only for newly added beers(default)
 my $newscan; #if set, new crawling will be started, even if the previous one has not been completed
-my $batchsize=10; #currently ignored
-GetOptions('rescan' => \$rescan, 'newscan' => \$newscan, 'batchsize:i' => \$batchsize);
-$logger->info("rescan is: $rescan, newscan is: $newscan, batchsize: $batchsize");
+my $batchsize=20; #currently ignored
+my $oldsource;
+GetOptions('rescan' => \$rescan, 'newscan' => \$newscan, 'batchsize:i' => \$batchsize, 'oldsource'=>\$oldsource);
+$logger->info("rescan is: $rescan, newscan is: $newscan, batchsize: $batchsize, oldsource: $oldsource");
 
 #connect do db
 my $client = MongoDB::MongoClient->new(host => "$mongoUrl:$mongoPort");
@@ -110,7 +113,7 @@ if($newscan){
 }
 
 ############################################################
-# all set, get the shit rolling
+# set some crawl metadata if needed
 $logger->info("Crawl id is $crawlId");
 my $thisCrawl = ($crawls->find({"id"=>$crawlId})->all)[0];
 $thisCrawl->{startTime}=&getTimestamp if ! defined $thisCrawl->{startTime};
@@ -118,12 +121,12 @@ $newscan=$thisCrawl->{newscan} if defined $thisCrawl->{newscan};
 $thisCrawl->{newscan}=$newscan if ! defined $thisCrawl->{newscan};
 $rescan=$thisCrawl->{rescan} if defined $thisCrawl->{rescan};
 $thisCrawl->{rescan}=$rescan if ! defined $thisCrawl->{rescan};
-$batchsize=$thisCrawl->{batchsize} if defined $thisCrawl->{batchsize};
+#$batchsize=$thisCrawl->{batchsize} if defined $thisCrawl->{batchsize};
 $thisCrawl->{batchsize}=$batchsize if ! defined $thisCrawl->{batchsize};
 $thisCrawl->{completed}=0 if ! defined $thisCrawl->{completed};
 $thisCrawl->{rowsDone}=0 if ! defined $thisCrawl->{rowsDone};
-#$thisCrawl->{badlinks}=() if ! defined $thisCrawl->{badlinks};
 
+#handle the file if not set (firstcrawl? )
 if(! defined $thisCrawl->{beerFile}){
     my ($bFName, $lineCounter, $toDownloadCounter) = &getBeersFile($rescan);
     $logger->info("Got beer file. fname is $bFName. I will insert this file into db");
@@ -163,6 +166,7 @@ $pua->in_order  (0);  # handle requests in order of registration
 $pua->duplicates(0);  # ignore duplicates
 $pua->timeout   (22);  # in seconds
 $pua->redirect  (1);  # follow redirects
+$pua->max_req(10);
 
 my @requestsPool;
 $crawlStartTime=time;
@@ -207,9 +211,16 @@ while(<$readBeers>){
             $lastSyncTime = time;
         }
 
-        #add more parsing threads id needed
-        if($respQ->pending > 40){
-            $logger->warn("More than 40 parsing tasks in the Q. Adding 1 more parsing thread..");
+        #add more parsing threads if needed
+        my $localParseNo;
+        {
+            lock $parsersNo;
+            $localParseNo=$parsersNo;
+            
+        }
+        if($respQ->pending > 10 && $localParseNo<2){
+            $logger->warn("More than 40 parsing tasks in the Q. Adding 1 more parsing thread. Total parsers will be: "
+            .($localParseNo+1));
             &initParsingEngine();
         }
 
@@ -239,6 +250,7 @@ while(<$readBeers>){
         $pua->duplicates(0);  # ignore duplicates
         $pua->timeout   (22);  # in seconds
         $pua->redirect  (1);  # follow redirects
+        $pua->max_req(10);
 
         #do some logging and predictions..
         my $elapsed = time - $crawlStartTime;
@@ -337,9 +349,9 @@ sub getBeersFile{
 
     { 
         #download zip and extract
-#  unlink  $beerZipFile;
+        unlink  $beerZipFile unless $oldsource;
         $logger->info("Downloading beer list.");
-#  getstore($beerListUrl, $beerZipFile);
+        getstore($beerListUrl, $beerZipFile) unless $oldsource;
         $logger->info("Zipped beer list downloaded.");
         my $zippo = Archive::Zip->new;
         unless ( $zippo->read( $beerZipFile ) == AZ_OK ) {
@@ -351,7 +363,7 @@ sub getBeersFile{
         unlink $extractedBeerList;
         $logger->info("File with list is named: $extractedBeerList. Extracting from archive..");
         $zippo->extractMember($extractedBeerList);
-#    unlink $beerZipFile;
+        unlink $beerZipFile unless $oldsource;
         $logger->info("Beer list extracted");
     }
 
@@ -383,7 +395,6 @@ sub getBeersFile{
     }
     return ($extractedBeerList, $counter, $toDownloadCounter);
 }
-
 
 sub getTimestamp{
     strftime("%Y-%m-%d_%H-%M-%S", localtime);
