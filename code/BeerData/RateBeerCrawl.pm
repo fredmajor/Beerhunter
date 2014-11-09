@@ -170,18 +170,20 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
         $beer{breweryLink}=$baseUrl.$breweryLink if defined $breweryLink;
         $beer{style}=$style if defined $style;
         $beer{styleLink}=$baseUrl.$styleLink if defined $styleLink;
-        $beer{overallMark}=$overallMark if defined $overallMark;
-        $beer{styleMark}=$styleMark if defined $styleMark;
-        $beer{abv}=$abv if defined $abv;
-        $beer{ratings}=$ratings if defined $ratings;
+        $beer{overallMark}=($overallMark+0) if defined $overallMark;
+        $beer{styleMark}=($styleMark+0) if defined $styleMark;
+        $beer{abv}=($abv + 0) if defined $abv;
+        $beer{ratings}=($ratings + 0) if defined $ratings;
         $beer{seasonal}=$seasonal if defined $seasonal;
-        $beer{calories}=$calories if defined $calories;
-        $beer{weightedAvg}=$weightedAvg if defined $weightedAvg;
+        $beer{calories}=($calories + 0) if defined $calories;
+        $beer{weightedAvg}=($weightedAvg + 0) if defined $weightedAvg;
         $beer{desc}=$desc if defined $desc;
         $beer{imgLink}=$imgLink if defined $imgLink;
         $beer{origin}=$origin if defined $origin;
         return \%beer;
+        
         #TODO - dorobic IBU!!!!
+        #html decode or something similar texts on the beer
     }
 
     1;
