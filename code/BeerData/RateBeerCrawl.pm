@@ -28,7 +28,7 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
         $logger->debug("Parsing $url");
         my $bData=$self->parseData($text);
         $bData->{"url"}=$url;
-        $logger->info("Parsed $url");
+        $logger->debug("Parsed $url");
         return  $bData;
     }
 
@@ -75,7 +75,7 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
         }
 
         my $infoPath=q(.//*[@id='container']/table//tr[2]/td[2]/div/div[1]);
-        my ($abv, $ratings, $seasonal, $calories, $weightedAvg);
+        my ($abv, $ratings, $seasonal, $ibu, $calories, $weightedAvg);
         if ($tree->exists($infoPath)) {
             my $wholeDiv=$tree->findvalue($infoPath);
             {
@@ -91,6 +91,11 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
             {
                 $wholeDiv=~/seasonal:\s*(\w+)/i;
                 $seasonal=$1 if defined $1;
+            }
+
+            {
+                $wholeDiv=~/ibu:\s*(\w+)/i;
+                $ibu=$1 if defined $1;
             }
 
             {
@@ -156,6 +161,7 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
         $logger->trace("Abv: $abv") if defined $abv;
         $logger->trace("Ratings: $ratings") if defined $ratings;
         $logger->trace("Seasonal: $seasonal") if defined $seasonal;
+        $logger->trace("Ibu: $ibu") if defined $ibu;
         $logger->trace("Calories: $calories") if defined $calories;
         $logger->trace("Weighted avg:  $weightedAvg") if defined $weightedAvg;
         $logger->trace("Description:  $desc") if defined $desc;
@@ -180,9 +186,9 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
         $beer{desc}=$desc if defined $desc;
         $beer{imgLink}=$imgLink if defined $imgLink;
         $beer{origin}=$origin if defined $origin;
+        $beer{ibu}=($ibu+0) if defined $ibu;
         return \%beer;
         
-        #TODO - dorobic IBU!!!!
         #html decode or something similar texts on the beer
     }
 

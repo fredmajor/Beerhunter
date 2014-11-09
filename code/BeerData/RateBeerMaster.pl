@@ -29,6 +29,8 @@ our $crawlStartTime;
 our $respQ = Thread::Queue->new();
 our $badLinks=0;
 our $downloadCounter=0;
+my $syncPeriod=120; #will make sure that all responses are parsed and persisted in DB every at most 120s
+our $parsersNo:shared =0;
 
 my $logconf = qq(
 log4perl.category                   = WARN, Syncer, SyncerC
@@ -53,7 +55,7 @@ log4perl.appender.SyncerC            = Log::Log4perl::Appender::Synchronized
 log4perl.appender.SyncerC.appender   = stdout
 
 log4perl.logger.Beerhunter.RateBeerMaster=DEBUG
-log4perl.logger.Beerhunter.RateBeerCrawl=WARN
+log4perl.logger.Beerhunter.RateBeerCrawl=INFO
 );
 
 Log::Log4perl::init(\$logconf);
@@ -120,6 +122,8 @@ $batchsize=$thisCrawl->{batchsize} if defined $thisCrawl->{batchsize};
 $thisCrawl->{batchsize}=$batchsize if ! defined $thisCrawl->{batchsize};
 $thisCrawl->{completed}=0 if ! defined $thisCrawl->{completed};
 $thisCrawl->{rowsDone}=0 if ! defined $thisCrawl->{rowsDone};
+#$thisCrawl->{badlinks}=() if ! defined $thisCrawl->{badlinks};
+
 if(! defined $thisCrawl->{beerFile}){
     my ($bFName, $lineCounter, $toDownloadCounter) = &getBeersFile($rescan);
     $logger->info("Got beer file. fname is $bFName. I will insert this file into db");
@@ -167,6 +171,7 @@ my $rowsDoneLast = $thisCrawl->{rowsDone};
 $logger->info("already done rows: $rowsDoneLast. I will skip them.") if $rowsDoneLast>0;
 my $rowsToSkip=$rowsDoneLast if $rowsDoneLast>0;
 $logger->info("Entering crawling loop");
+my $lastSyncTime=time;
 while(<$readBeers>){
     if($rowsToSkip>0){
         --$rowsToSkip;
@@ -183,16 +188,32 @@ while(<$readBeers>){
             }  
         }
         my $entries = $pua->wait();
+        my $pending=$respQ->pending;
         @requestsPool=();
         $logger->info("GOT $batchsize requests. Queueing them for parsing threads.");
-        my $pending=$respQ->pending;
-        
-        #update DB with numbers from PREVIOUS batch. To be more likely that the data is already parsed and persisted
-        my $doneTotal = $rowsDoneLast+$downloadCounter;
-        $thisCrawl->{rowsDone}=$doneTotal;
-        $crawls->update( {"id"=>$crawlId}, $thisCrawl);
 
-        #parse results
+        #update DB. this is to handle interupts properly
+        if(time - $lastSyncTime > $syncPeriod){
+            $logger->info("Syncing rowsDone value in DB");
+            while($respQ->pending() != 0 ){
+                $logger->info("There are still pending tasks in the parser queue. Waiting.. Pending taks: "
+                    .$respQ->pending);
+                sleep 5;
+            }
+            my $doneTotal = $rowsDoneLast+$downloadCounter;
+            $thisCrawl->{rowsDone}=$doneTotal;
+            $crawls->update( {"id"=>$crawlId}, $thisCrawl);
+            $logger->info("Synced.");
+            $lastSyncTime = time;
+        }
+
+        #add more parsing threads id needed
+        if($respQ->pending > 40){
+            $logger->warn("More than 40 parsing tasks in the Q. Adding 1 more parsing thread..");
+            &initParsingEngine();
+        }
+
+        #parse results and handle bad links
         foreach (keys %$entries){
             my $res = $entries->{$_}->response;
             my $url = $res->request->url;
@@ -202,12 +223,16 @@ while(<$readBeers>){
             if($code != 200){
                 $logger->warn("unable to get the data from: $url");
                 $badLinks++;
+                if (! defined $thisCrawl->{badlinks}){
+                    $thisCrawl->{badlinks}=[];
+                }
+                push @{$thisCrawl->{badlinks}}, $$url;
+                $crawls->update({"id"=>$crawlId}, $thisCrawl);
                 next;
             }
             my $toQ={ "url"=>$url, "content"=>$content};
             $respQ->enqueue($toQ);
         }
-
 
         $pua->initialize();
         $pua->in_order  (0);  # handle requests in order of registration
@@ -235,18 +260,23 @@ $logger->info("Removed $outFName from local drive.");
 ######################################################################
 ######################################################################
 sub initParsingEngine{
-    my $worker=threads->create(\&handleResponses);
-    $worker->detach;
+    {
+        lock $parsersNo;
+        my $worker=threads->create(\&handleResponses, ++$parsersNo);
+        $worker->detach;
+        $logger->info("New parser started. Parsers total: ". $parsersNo);
+    }
 }
 
 sub handleResponses{
+    my $myNo = shift;
     my $parser = Beerhunter::BeerData::RateBeerCrawl->new(); 
     my $client = MongoDB::MongoClient->new(host => "$mongoUrl:$mongoPort");
     my $beerDb=$client->get_database('beerDb');
     my $rbBeers=$beerDb->get_collection('rbBeers');
 
     my ($parsingThisSessionTotalTime, $parsedThisSessionLocal)=(0,0);
-    $logger->info("Starting parser thread.");
+    $logger->info("Starting parser thread for parser#: ".$myNo);
     while(1){
         my $toQ= $respQ->dequeue();
         my $parseLoopTimer=time;
@@ -262,7 +292,7 @@ sub handleResponses{
         if($parsedThisSessionLocal % $batchsize == 0 ){
             my $parseSpeed=$parsedThisSessionLocal/$parsingThisSessionTotalTime;
             $parseSpeed=substr($parseSpeed,0,5);
-            $logger->info("AVG parsing speed (single thread): $parseSpeed (pages/s)");
+            $logger->info("AVG parsing speed (parser#: $myNo): $parseSpeed (pages/s)");
         }
     }
 }
@@ -365,4 +395,3 @@ sub closeCrawl{
     $crawls->update( {"id"=>$crawlId},{"completed"=>1});
     $logger->info("Closed crawl # $crawlId");
 }
-##todo - synchronize mongo!

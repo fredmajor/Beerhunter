@@ -1,4 +1,4 @@
-$memory = 512
+$memory = 1025
 $cpus = 1
 $mongo_port = 27017
 $mongo_host = "193.168.1.2"
