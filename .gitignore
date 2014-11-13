@@ -1,2 +1,4 @@
 *.komodoproject
+infra/.vagrant
+
 

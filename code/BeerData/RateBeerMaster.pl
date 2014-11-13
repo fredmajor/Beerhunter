@@ -1,7 +1,9 @@
 use 5.018;
+use common::sense;
 use utf8;
 use threads;
 use threads::shared;
+use List::Util qw(sum);
 use Thread::Queue;
 use File::Copy;
 use FindBin;
@@ -9,6 +11,7 @@ use Time::HiRes qw/time/;
 use HTML::Entities;
 use IO::File;
 use Data::Dumper;
+use YADA;
 use LWP::Simple;
 use MongoDB;
 use MongoDB::OID;
@@ -17,22 +20,25 @@ use Log::Log4perl;
 use POSIX;
 use Archive::Zip qw(:ERROR_CODES :CONSTANTS);
 use MongoDB::GridFS;
-use LWP::Parallel::UserAgent;
+#use LWP::Parallel::UserAgent;
 use HTTP::Request;
 use lib $FindBin::Bin;
 require "RateBeerCrawl.pm";
 
-my $mongoUrl="dev.beerhunter.pl";
-my $mongoPort=27017;
+our $mongoUrl="dev.beerhunter.pl";
+our $mongoPort=27017;
 our $baseUrl=q(http://www.ratebeer.com);
-my $syncPeriod=120; #will make sure that all responses are parsed and persisted in DB every at most 120s
+our $syncPeriod=120; #will make sure that all responses are parsed and persisted in DB every at most 120s
 
 #more public stuff
 our $crawlStartTime;
 our $respQ = Thread::Queue->new();
-our $badLinks=0;
-our $downloadCounter=0;
+our $badLinks : shared = 0;
+our $downloadCounterShared : shared =0;
 our $parsersNo:shared =0;
+our $lastRecordDownloadTime : shared = time;
+our @downloadSpeedLastMany: shared = ();
+my @downloadSpeedSamples;
 
 my $logconf = qq(
 log4perl.category                   = WARN, Syncer, SyncerC
@@ -68,7 +74,7 @@ my $logger = Log::Log4perl->get_logger('Beerhunter.RateBeerMaster');
 my $rescan; #if set, it will query for all the beers. If not, it will query only for newly added beers(default)
 my $newscan; #if set, new crawling will be started, even if the previous one has not been completed
 my $batchsize=20; #currently ignored
-my $oldsource;
+my $oldsource; #try to use  old beers.zip file if present
 GetOptions('rescan' => \$rescan, 'newscan' => \$newscan, 'batchsize:i' => \$batchsize, 'oldsource'=>\$oldsource);
 $logger->info("rescan is: $rescan, newscan is: $newscan, batchsize: $batchsize, oldsource: $oldsource");
 
@@ -76,56 +82,58 @@ $logger->info("rescan is: $rescan, newscan is: $newscan, batchsize: $batchsize, 
 my $client = MongoDB::MongoClient->new(host => "$mongoUrl:$mongoPort");
 my $beerDb=$client->get_database('beerDb');
 my $crawls=$beerDb->get_collection('crawls');
+my $crawlSpeed=$beerDb->get_collection('crawlSpeed');
 
-#get last crawl ID if defined
+#get last crawl ID if defined. Otherwise return "-1".
 my @lastCrawlID=$crawls->find->sort({id => -1})->limit(1)->all;
-my $lastCrawlId;
+my $lastCrawlId=-1;
 $lastCrawlId = %{$lastCrawlID[0]}{"id"} if defined $lastCrawlID[0];
 
 #check if this is the first scan.
-my $firstScan=0;
-if(!defined $lastCrawlId){
-    $logger->info("No lastCrawlID defined. Assuming this is first crawling.");
+if($lastCrawlId==-1){
+    $logger->info("No lastCrawlID defined. Assuming this is first crawling. Setting newscan and rescan.");
     $newscan=1;
     $rescan=1;
-    $firstScan=1;
-    $lastCrawlId=-1;
 }
+$logger->info("lastCrawlId = $lastCrawlId");
 
 ########################################
-# now I have crawlId. 
+# now let's establish this crawlId and update db if needed
 my $crawlId;
-if($newscan){
-    &closeCrawl($lastCrawlId) unless $firstScan;
+my $lastCrawlRef = ($crawls->find({"id"=>$lastCrawlId})->all)[0];
+my %lastCrawl;
+my %lastCrawl = %{$lastCrawlRef} if defined $lastCrawlRef;
+if($newscan || (defined %lastCrawl && $lastCrawl{completed}) ){
+    $logger->info("newscan requested. This means I will start a new crawling from scratches.") if $newscan;
+    $logger->info("last crawl compleated. This one will start from the beggining") 
+        if (!$newscan && defined %lastCrawl &&  $lastCrawl{completed});
+    &closeCrawl($lastCrawlId) if $lastCrawlId!=-1;
     $crawlId=++$lastCrawlId;
     $crawls->insert({"id" => $crawlId});
 }else{
-    $crawlId=$lastCrawlId;
-    $logger->info("No new crawl requested implicitly. Checking if old one is completed..");
-    my %thisCrawl = %{($crawls->find({"id"=>$crawlId})->all)[0]};
-    if($thisCrawl{completed}){
-        $logger->info("Last crawl completed. Will perform a new one");
-        $crawlId+=1;
-        $crawls->insert({"id" => $crawlId});
-    }else{
-        $logger->info("Last crawl has not completed. I will cary on that one...");
-    }
+    $logger->info("Last crawl has not completed. I will cary on that one...");
+    $crawlId= $lastCrawlId;
 }
+my $thisSpeed=($crawlSpeed->find({"crawlId"=>$crawlId})->all)[0];
+$crawlSpeed->insert({"crawlId"=>$crawlId}) if !defined $thisSpeed;
 
 ############################################################
 # set some crawl metadata if needed
 $logger->info("Crawl id is $crawlId");
 my $thisCrawl = ($crawls->find({"id"=>$crawlId})->all)[0];
 $thisCrawl->{startTime}=&getTimestamp if ! defined $thisCrawl->{startTime};
-$newscan=$thisCrawl->{newscan} if defined $thisCrawl->{newscan};
 $thisCrawl->{newscan}=$newscan if ! defined $thisCrawl->{newscan};
 $rescan=$thisCrawl->{rescan} if defined $thisCrawl->{rescan};
 $thisCrawl->{rescan}=$rescan if ! defined $thisCrawl->{rescan};
-#$batchsize=$thisCrawl->{batchsize} if defined $thisCrawl->{batchsize};
-$thisCrawl->{batchsize}=$batchsize if ! defined $thisCrawl->{batchsize};
 $thisCrawl->{completed}=0 if ! defined $thisCrawl->{completed};
 $thisCrawl->{rowsDone}=0 if ! defined $thisCrawl->{rowsDone};
+my $oldBatchsize=$thisCrawl->{batchsize} if defined $thisCrawl->{batchsize};
+$thisCrawl->{batchsize}=$batchsize if ! defined $thisCrawl->{batchsize};
+$thisCrawl->{batchsize}=$batchsize if (defined $oldBatchsize && $oldBatchsize!=$batchsize);
+$crawls->update( {"id"=>$crawlId}, $thisCrawl);
 
+
+#############################################################
 #handle the file if not set (firstcrawl? )
 if(! defined $thisCrawl->{beerFile}){
     my ($bFName, $lineCounter, $toDownloadCounter) = &getBeersFile($rescan);
@@ -137,13 +145,14 @@ if(! defined $thisCrawl->{beerFile}){
     my $bid = $grid->insert($fh);
     $logger->info("inserted file to db");
     $thisCrawl->{beerFile}=$bid;
-    $thisCrawl->{rowsTotal}=$lineCounter;
+    $thisCrawl->{rowsTotalInFile}=$lineCounter;
     $thisCrawl->{rowsToDownload}=$toDownloadCounter;
+    $crawls->update( {"id"=>$crawlId}, $thisCrawl);
     unlink $bFName;
+    $logger->info("Crawl metadata updated");
 }
-my $rowsTotalInFile=$thisCrawl->{rowsTotal};
-my $rowsTotalToDownload=$thisCrawl->{rowsToDownload};
 
+######################################################################
 #get the beerfile from the db. it's already good to go
 my $grid=$beerDb->get_gridfs;
 my $fh = $grid->get($thisCrawl->{beerFile});
@@ -156,118 +165,157 @@ close $outfile;
 $logger->info("file $outFName  written to disk from the db");
 $crawls->update( {"id"=>$crawlId}, $thisCrawl);
 $logger->info("Crawl metadata updated");
-### metadata ready, record updated, file ready. Start crawling!!
 ################################################
 
+################################################################################
+## stuff for cawling itself
 open(my $readBeers, "<", $outFName) or die;
 $logger->info("opened $outFName for reading");
-my $pua = LWP::Parallel::UserAgent->new();
-$pua->in_order  (0);  # handle requests in order of registration
-$pua->duplicates(0);  # ignore duplicates
-$pua->timeout   (22);  # in seconds
-$pua->redirect  (1);  # follow redirects
-$pua->max_req(10);
-
-my @requestsPool;
 $crawlStartTime=time;
+my $lastSyncTime=time;
 my $rowsDoneLast = $thisCrawl->{rowsDone};
-&initParsingEngine();
 $logger->info("already done rows: $rowsDoneLast. I will skip them.") if $rowsDoneLast>0;
 my $rowsToSkip=$rowsDoneLast if $rowsDoneLast>0;
 $logger->info("Entering crawling loop");
-my $lastSyncTime=time;
+my $rowsTotalToDownload=$thisCrawl->{rowsToDownload};
+&initParsingEngine();
+
+my $q=YADA->new(
+    common_opts => {
+        # Available opts @ http://curl.haxx.se/libcurl/c/curl_easy_setopt.html
+        encoding        => '',
+        followlocation  => 1,
+        maxredirs       => 5,
+    }, 
+    http_response => 1, 
+    max => 10,
+    retry =>3
+);
+
+my @requestsPool;
 while(<$readBeers>){
     if($rowsToSkip>0){
         --$rowsToSkip;
         next;
     }
-    push @requestsPool, (HTTP::Request->new('GET', $_));
-    my $arrSize = @requestsPool;
 
-    if($arrSize >=  $batchsize || eof){
-        foreach my $req (@requestsPool){
-            $logger->trace("Registering ".$req->url." in GETter");
-            if ( my $res = $pua->register ($req) ) { 
-                $logger-warn($res->error_as_HTML); 
-            }  
-        }
-        my $entries = $pua->wait();
-        my $pending=$respQ->pending;
+    push @requestsPool, $_;
+    my $poolSize = @requestsPool;
+
+    if($poolSize >= $batchsize ||eof){
+        $q->append(\@requestsPool, \&on_finish)->wait();
         @requestsPool=();
-        $logger->info("GOT $batchsize requests. Queueing them for parsing threads.");
+    }
 
-        #update DB. this is to handle interupts properly
-        if(time - $lastSyncTime > $syncPeriod){
-            $logger->info("Syncing rowsDone value in DB");
-            while($respQ->pending() != 0 ){
-                $logger->info("There are still pending tasks in the parser queue. Waiting.. Pending taks: "
-                    .$respQ->pending);
-                sleep 5;
-            }
-            my $doneTotal = $rowsDoneLast+$downloadCounter;
-            $thisCrawl->{rowsDone}=$doneTotal;
-            $crawls->update( {"id"=>$crawlId}, $thisCrawl);
-            $logger->info("Synced.");
-            $lastSyncTime = time;
+    #update DB. this is to handle interupts properly
+    if(time - $lastSyncTime > $syncPeriod){
+        $logger->info("Syncing rowsDone value in DB");
+        while($respQ->pending() != 0 ){
+            $logger->info("There are still pending tasks in the parser queue. Waiting.. Pending taks: "
+                .$respQ->pending);
+            sleep 1;
         }
-
-        #add more parsing threads if needed
-        my $localParseNo;
+        my $doneTotal;
         {
-            lock $parsersNo;
-            $localParseNo=$parsersNo;
-            
+            lock $downloadCounterShared;
+            $doneTotal = $rowsDoneLast+$downloadCounterShared;
         }
-        if($respQ->pending > 10 && $localParseNo<2){
+        $thisCrawl->{rowsDone}=$doneTotal;
+        $crawls->update( {"id"=>$crawlId}, $thisCrawl);
+        $logger->info("Synced. Rows done total: $doneTotal");
+        $lastSyncTime = time;
+    }
+
+    #add more parsing threads if needed
+    {
+        lock $parsersNo;
+        if($respQ->pending > 10 && $parsersNo<2){
             $logger->warn("More than 40 parsing tasks in the Q. Adding 1 more parsing thread. Total parsers will be: "
-            .($localParseNo+1));
+                .($parsersNo+1));
             &initParsingEngine();
         }
-
-        #parse results and handle bad links
-        foreach (keys %$entries){
-            my $res = $entries->{$_}->response;
-            my $url = $res->request->url;
-            my $content = $res->content;
-            my $code = $res->code;
-            $downloadCounter++;
-            if($code != 200){
-                $logger->warn("unable to get the data from: $url");
-                $badLinks++;
-                if (! defined $thisCrawl->{badlinks}){
-                    $thisCrawl->{badlinks}=[];
-                }
-                push @{$thisCrawl->{badlinks}}, $$url;
-                $crawls->update({"id"=>$crawlId}, $thisCrawl);
-                next;
-            }
-            my $toQ={ "url"=>$url, "content"=>$content};
-            $respQ->enqueue($toQ);
-        }
-
-        $pua->initialize();
-        $pua->in_order  (0);  # handle requests in order of registration
-        $pua->duplicates(0);  # ignore duplicates
-        $pua->timeout   (22);  # in seconds
-        $pua->redirect  (1);  # follow redirects
-        $pua->max_req(10);
-
-        #do some logging and predictions..
-        my $elapsed = time - $crawlStartTime;
-        my $dSpeed = substr( $downloadCounter/$elapsed, 0, 4);
-        my $leftLinks=($rowsTotalToDownload-($downloadCounter+$rowsDoneLast));
-        my $etr=substr((($leftLinks*($elapsed/$downloadCounter))/3600),0,5);
-        $logger->info("Session time: ". substr(($elapsed/3600),0,5) . " h. Downloaded in session: $downloadCounter. ".
-            "Downloaded total: ". ($rowsDoneLast+$downloadCounter) . ". Download speed: $dSpeed (url/s). Bad links: $badLinks. "
-            ."Left links: ". $leftLinks . "/". $rowsTotalToDownload 
-            .". Pending parse jobs: $pending. ETR: $etr h.");
     }
 }
 $thisCrawl->{completed}=1;
 $thisCrawl->{finishTime}=time;
 $crawls->update( {"id"=>$crawlId}, $thisCrawl);
-unlink $outFName; #file which contained crawled links
-$logger->info("Removed $outFName from local drive.");
+#unlink $outFName; #file which contained crawled links
+#$logger->info("Removed $outFName from local drive.");
+
+#a single url has been downloaded
+sub on_finish{
+    $|=1;
+    my $downCounterLocal;
+    {
+        lock $downloadCounterShared;
+        $downCounterLocal = ++$downloadCounterShared;
+    }
+    my $results = shift;
+    my $error = $results->has_error;
+    my $success = $results->response->is_success;
+    my $url =  $results->final_url;
+    my $content = $results->response->decoded_content;
+
+    #handle bad links
+    if(!$success || $error){
+        {
+            lock $badLinks;
+            $badLinks++;
+            if (! defined $thisCrawl->{badlinks}){
+                $thisCrawl->{badlinks}=[];
+            }
+            push @{$thisCrawl->{badlinks}}, $url;
+            $crawls->update({"id"=>$crawlId}, $thisCrawl);
+            $logger->warn("Bad link encountered: $url");
+        }
+    }
+
+    ############################################################
+    #print and save some download speed stats
+    my $localAvs;
+    {
+        lock $lastRecordDownloadTime;
+        my $elapsed =  time - $lastRecordDownloadTime;
+        $lastRecordDownloadTime = time;
+        push @downloadSpeedSamples, $elapsed;
+        if(scalar @downloadSpeedSamples == $batchsize){
+            my $updTimer=time;
+            for my $elap (@downloadSpeedSamples){
+                $elap+=0;
+                $crawlSpeed->update({"crawlId"=>$crawlId}, {'$push'=>{'speed' => $elap}});
+            }
+            $updTimer = time - $updTimer;
+            my $timeSum;
+            $timeSum += $_ for @downloadSpeedSamples;
+            $localAvs = (scalar @downloadSpeedSamples)/$timeSum;
+            $logger->debug("(update time:". substr($updTimer,0,4).") Download speed (last $batchsize links): ". substr($localAvs,0,4). " (url/s)");
+            #$logger->info("Download speed(last $batchsize links): ". substr($localAvs,0,4). " (url/s)");
+            @downloadSpeedSamples=();
+            push @downloadSpeedLastMany, $localAvs;
+        }
+    }
+    my $bigbatch=$batchsize*10;
+    if($downCounterLocal % $bigbatch ==0){
+        {
+            lock @downloadSpeedLastMany;
+            my $sessionTime = time - $crawlStartTime;
+            my $leftLinks= ($rowsTotalToDownload - ( $downCounterLocal+$rowsDoneLast));
+            my $pendingJobs=$respQ->pending();
+            my $etr=substr((($leftLinks*($sessionTime/$downCounterLocal))/3600),0,5);
+            my $averageBigSpeed=sum(@downloadSpeedLastMany)/@downloadSpeedLastMany;
+
+            $logger->info("Downloaded in this session: $downCounterLocal. Session time: ". substr(($sessionTime/3600),0,5).
+            " h. Downloaded total: ". ($rowsDoneLast+$downCounterLocal) . ". Bad links: $badLinks. Left links: "
+            . $leftLinks. "/". $rowsTotalToDownload . ". Pending parse jobs: $pendingJobs. Etr: $etr h");
+            $logger->info("Download AVSs for last $bigbatch links (avg=". substr($averageBigSpeed,0,4) .") (url/s): "
+                . join("\t", map( substr($_,0,4), @downloadSpeedLastMany) ));
+            @downloadSpeedLastMany=();
+        }
+    }
+    ############################################################
+    my $toQ={ "url"=>$url, "content"=>$content};
+    $respQ->enqueue($toQ);
+}
 
 ######################################################################
 ######################################################################
@@ -294,17 +342,19 @@ sub handleResponses{
         my $parseLoopTimer=time;
         my $urlRef = ($toQ->{url});
         my $url = $$urlRef;
-        my $beerHashRef=$parser->getDataFromRB($url, $toQ->{content});
+        my $beerHashRef=$parser->parse_url($url, $toQ->{content});
         $rbBeers->remove({"url"=>$url});
         $rbBeers->insert($beerHashRef);
         $parsedThisSessionLocal++;
         $parseLoopTimer= time - $parseLoopTimer;
 
         $parsingThisSessionTotalTime+=$parseLoopTimer;
-        if($parsedThisSessionLocal % $batchsize == 0 ){
+        my $bigbatchsize= $batchsize *10;
+        if($parsedThisSessionLocal % $bigbatchsize == 0 ){
             my $parseSpeed=$parsedThisSessionLocal/$parsingThisSessionTotalTime;
             $parseSpeed=substr($parseSpeed,0,5);
-            $logger->info("AVG parsing speed (parser#: $myNo): $parseSpeed (pages/s)");
+            $logger->info("AVG parsing speed (last $bigbatchsize links, parser#: $myNo): $parseSpeed (pages/s)");
+            ($parsingThisSessionTotalTime, $parsedThisSessionLocal)=(0,0);
         }
     }
 }
@@ -349,7 +399,7 @@ sub getBeersFile{
 
     { 
         #download zip and extract
-        unlink  $beerZipFile unless $oldsource;
+        unlink  $beerZipFile;
         $logger->info("Downloading beer list.");
         getstore($beerListUrl, $beerZipFile) unless $oldsource;
         $logger->info("Zipped beer list downloaded.");
@@ -363,7 +413,7 @@ sub getBeersFile{
         unlink $extractedBeerList;
         $logger->info("File with list is named: $extractedBeerList. Extracting from archive..");
         $zippo->extractMember($extractedBeerList);
-        unlink $beerZipFile unless $oldsource;
+        unlink $beerZipFile;
         $logger->info("Beer list extracted");
     }
 
@@ -377,6 +427,7 @@ sub getBeersFile{
         my $rbBeers=$beerDb->get_collection('rbBeers');
         while(<$fin>){
             $counter++;
+            $logger->info("lines done: $counter") if ($counter%1000 == 0);
             s/\r?\n$//; #windows-style chomp
             my $link=&prepareLink($_);
 

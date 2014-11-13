@@ -1,6 +1,8 @@
 package Beerhunter::BeerData::RateBeerCrawl 0.01{
     use 5.018;
-    use utf8;
+    use common::sense;
+#    use utf8::all;
+    use Time::HiRes qw/time/;
     use Data::Dumper;
     use LWP::Simple;
     use JSON;
@@ -8,6 +10,7 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
     use HTML::Entities;
     use Encode;
     use URI::Escape;
+    use HTML::TreeBuilder::LibXML;
     use HTML::TreeBuilder::XPath;
     use HTML::Tidy;
 
@@ -21,7 +24,7 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
     }
 
     #handles one particular beer
-    sub getDataFromRB{
+    sub parse_url{
         my $self = shift;
         my $url=shift;
         my $text = shift;
@@ -32,20 +35,40 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
         return  $bData;
     }
 
+    sub parse_html{
+        my $self=shift;
+        my $text=shift;
+        my $bData=$self->parseData($text);
+    }
+
+    sub prepare_html{
+        my $self = shift;
+        my $beertml=shift;
+        my $tidyTimer=time;
+        my $tidy=HTML::Tidy->new();
+        my $tidyBeers = $tidy->clean($beertml);
+        $tidyTimer=time - $tidyTimer;
+        return $tidyBeers;
+    }
+
     sub parseData{
         my $self=shift;
         my $beertml = shift;
+        my $parseTimer = time;
         unless(defined $beertml){
             $logger->warn("passed html is not defined!");
             return 1;
         }
+
         #clean it up a bit
-        my $tidy=HTML::Tidy->new();
-        my $tidyBeers = $tidy->clean($beertml);
-        my $tree = HTML::TreeBuilder::XPath->new;
-        $tree->parse($tidyBeers);
+        my $tidyBeers=$self->prepare_html($beertml);
 
         #get the data from cleaned html
+        my $treeTimer = time;
+        my $tree = HTML::TreeBuilder::LibXML->new;
+        $tree->parse($tidyBeers);
+        $tree->eof;
+        $treeTimer = time - $treeTimer;
         my $title = $tree->findvalue(q(.//*[@id='container']/table//tr[1]/td[2]/div/div[4]/h1));
         my $breweryNode=$tree->findnodes
         (q(.//*[@id='container']/table//tr[2]/td[2]/div/table[1]//tr/td[2]/div[1]/big/b/a));
@@ -187,9 +210,9 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
         $beer{imgLink}=$imgLink if defined $imgLink;
         $beer{origin}=$origin if defined $origin;
         $beer{ibu}=($ibu+0) if defined $ibu;
+        $parseTimer=  time - $parseTimer;
         return \%beer;
         
-        #html decode or something similar texts on the beer
     }
 
     1;
