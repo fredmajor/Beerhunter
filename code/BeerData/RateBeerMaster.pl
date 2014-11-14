@@ -242,6 +242,14 @@ $crawls->update( {"id"=>$crawlId}, $thisCrawl);
 #unlink $outFName; #file which contained crawled links
 #$logger->info("Removed $outFName from local drive.");
 
+#so if there is more than 100 bad links in less then 10s -> it means probably network problem. So we stop
+my $badLinkWindowLen=10;
+my $badLinkWindowSpacing=10; #if there is no bad links within 10s - reset the algorith
+my $badLinkWindowCount=100;
+our $badLinkWindow : shared = 0;
+our $badLinkWindowStart : shared = 0;
+our $inBadLinkWindow: shared = 0;
+
 #a single url has been downloaded
 sub on_finish{
     $|=1;
@@ -261,6 +269,28 @@ sub on_finish{
         {
             lock $badLinks;
             $badLinks++;
+
+            ############################################################
+            #### bad link sliding window algorith
+            #if(time - $badLinkWindowStart > $badLinkWindowLen){ # we're already past the window. Start a new one
+            #    $inBadLinkWindow = 0;
+            #}
+
+            #if($inBadLinkWindow){
+            #    if(time - $badLinkWindowStart > $badLinkWindowLen){ # we're already past the window. Start a new one
+            #        $badLinkWindow = 1;
+            #        $badLinkWindowStart = time;
+            #        $inBadLinkWindow=1;
+            #        $logger->warn("starting new badLinkWindow..");
+            #    }else{ #still in old window
+            #        $badLinkWindow++;
+            #        if($badLinkWindow > $badLinkWindowCount){
+            #            $logger->warn("more than $badLinkWindowCount in $badLinkWindowLen s! Stopping...");
+            #        }
+            #    }
+            #}
+            ############################################################
+
             if (! defined $thisCrawl->{badlinks}){
                 $thisCrawl->{badlinks}=[];
             }
@@ -305,8 +335,8 @@ sub on_finish{
             my $averageBigSpeed=sum(@downloadSpeedLastMany)/@downloadSpeedLastMany;
 
             $logger->info("Downloaded in this session: $downCounterLocal. Session time: ". substr(($sessionTime/3600),0,5).
-            " h. Downloaded total: ". ($rowsDoneLast+$downCounterLocal) . ". Bad links: $badLinks. Left links: "
-            . $leftLinks. "/". $rowsTotalToDownload . ". Pending parse jobs: $pendingJobs. Etr: $etr h");
+                " h. Downloaded total: ". ($rowsDoneLast+$downCounterLocal) . ". Bad links: $badLinks. Left links: "
+                . $leftLinks. "/". $rowsTotalToDownload . ". Pending parse jobs: $pendingJobs. Etr: $etr h");
             $logger->info("Download AVSs for last $bigbatch links (avg=". substr($averageBigSpeed,0,4) .") (url/s): "
                 . join("\t", map( substr($_,0,4), @downloadSpeedLastMany) ));
             @downloadSpeedLastMany=();

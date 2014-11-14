@@ -1,0 +1,18 @@
+requires 'common::sense', '3.73' ;
+requires 'List::Util';
+requires 'Thread::Queue';
+requires 'File::Copy';
+requires 'FindBin';
+requires 'Time::HiRes';
+requires 'HTML::Entities';
+requires 'IO::File';
+requires 'Data::Dumper';
+requires 'YADA';
+requires 'LWP::Simple';
+requires 'MongoDB';
+requires 'MongoDB::OID';
+requires 'Getopt::Long';
+requires 'Log::Log4perl', '1.46';
+requires 'Archive::Zip', '1.39';
+requires 'MongoDB::GridFS';
+requires 'HTTP::Request';
