@@ -1,9 +1,27 @@
+# This software is Copyright (c) 2014 by Chris Weyl &lt;chris.weyl@wps.io&gt;
+#
+# This work is licensed under a Creative Commons Attribution-ShareAlike 4.0
+# International License (CC-BY-SA-4.0).
+#
+# http://creativecommons.org/licenses/by-sa/4.0/
+
 FROM rsrchboy/perlbrew-base:latest
-MAINTAINER Freddy Major <major.freddy@yahoo.com>
+MAINTAINER Fred Major major.freddy@yahoo.com
 
 RUN rm /bin/sh && ln -s /bin/bash /bin/sh
-RUN perlbrew install -v perl-5.20.1 -Dusethreads --as perl-5.20.1_threads
-RUN perlbrew switch perl-5.20.1_threads
-RUN cpanm Carton
-CMD "echo" "hi Fred!"
+ENV TARGET_PERL_FULL stable
+ENV TARGET_PERL      stable_threads
+
+RUN perlbrew install  --thread --as $TARGET_PERL $TARGET_PERL_FULL  && rm -rf /usr/local/perlbrew/build/*
+
+RUN perlbrew switch $TARGET_PERL
+
+ENV PATH /usr/local/perlbrew/perls/$TARGET_PERL/bin:$PATH
+ENV MANPATH /usr/local/perlbrew/perls/$TARGET_PERL/man
+ENV PERLBREW_MANPATH /usr/local/perlbrew/perls/$TARGET_PERL/man
+ENV PERLBREW_PATH /usr/local/perlbrew/bin:/usr/local/perlbrew/perls/$TARGET_PERL/bin
+ENV PERLBREW_PERL $TARGET_PERL
+
+RUN perlbrew info
+RUN perl -v
 
