@@ -76,9 +76,11 @@ my $rescan; #if set, it will query for all the beers. If not, it will query only
 my $newscan; #if set, new crawling will be started, even if the previous one has not been completed
 my $batchsize=20; #currently ignored
 my $oldsource; #try to use  old beers.zip file if present
-GetOptions('rescan' => \$rescan, 'newscan' => \$newscan, 'batchsize:i' => \$batchsize, 'oldsource'=>\$oldsource);
+my $newMongoUrl;
+GetOptions('rescan' => \$rescan, 'newscan' => \$newscan, 'batchsize:i' => \$batchsize, 'oldsource'=>\$oldsource, 'mongourl:s'=>\$newMongoUrl);
 $logger->info("rescan is: $rescan, newscan is: $newscan, batchsize: $batchsize, oldsource: $oldsource");
 
+$mongoUrl=$newMongoUrl if defined $newMongoUrl;
 #connect do db
 my $client = MongoDB::MongoClient->new(host => "$mongoUrl:$mongoPort");
 my $beerDb=$client->get_database('beerDb');

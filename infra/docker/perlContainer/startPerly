@@ -1,0 +1,14 @@
+#!/bin/bash
+NAME=perly
+docker build -t $NAME .
+IS_RUNNING=$(docker ps |grep $NAME | wc -l)
+echo "IS_RUNNING is $IS_RUNNING"
+
+if [ "$IS_RUNNING" -gt "0" ]; then
+        echo "$NAME is running now. removing..."
+        docker stop $NAME
+        docker rm -f  $NAME
+fi
+
+export PERLY_CONT=$(docker run -ti --link mongodb:mongodb  --name $NAME  $NAME /bin/bash)
+echo "started $NAME container. container id is $PERLY_CONT"

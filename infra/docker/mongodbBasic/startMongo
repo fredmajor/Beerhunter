@@ -1,0 +1,17 @@
+#!/bin/bash
+NAME=mongodb
+if [ ! -d /data/beers ]; then
+	mkdir -p /data/beers
+fi
+docker build -t $NAME .
+IS_RUNNING=$(docker ps |grep $NAME | wc -l)
+echo "IS_RUNNING is $IS_RUNNING"
+
+if [ "$IS_RUNNING" -gt "0" ]; then
+	echo "$NAME is running now. removing..."
+	docker stop $NAME
+	docker rm $NAME
+fi
+
+export MONGODB_CONT=$(docker run -d -p 27017:27017 -v /data/beers:/data/db --name $NAME  $NAME)
+echo "started mongodb container. container id is $MONGODB_CONT"
