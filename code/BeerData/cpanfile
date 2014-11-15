@@ -26,4 +26,5 @@ requires 'HTML::TreeBuilder::XPath';
 requires 'Alien::Tidyp';
 requires 'HTML::Tidy';
 requires 'IPC::Semaphore';
+requires 'IPC::Shareable';
 requires 'ExtUtils::PkgConfig';
