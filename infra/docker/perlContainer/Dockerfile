@@ -27,9 +27,6 @@ RUN git clone https://github.com/fredmajor/Beerhunter.git
 WORKDIR Beerhunter/code/BeerData
 RUN apt-get update &&  apt-get -y install  pkg-config  libcurl4-gnutls-dev
 RUN cpanm ExtUtils::PkgConfig
-# RUN cpanm  Net::Curl
-# RUN cpanm YADA
-
 RUN carton install
 
 RUN perlbrew info
