@@ -41,7 +41,8 @@ our @downloadSpeedLastMany: shared = ();
 my @downloadSpeedSamples;
 
 my $logconf = qq(
-log4perl.category                   = WARN, Syncer, SyncerC
+log4perl.category                   = WARN, Logfile, stdout
+# log4perl.category                   = WARN, Syncer, SyncerC
 
 # File appender (unsynchronized)
 log4perl.appender.Logfile           = Log::Log4perl::Appender::File
@@ -53,14 +54,14 @@ log4perl.appender.Logfile.layout    = PatternLayout
 log4perl.appender.Logfile.layout.ConversionPattern    = %5p (%F:%L) - %m%n
 
 # Synchronizing appender, using the file appender above
-log4perl.appender.Syncer            = Log::Log4perl::Appender::Synchronized
-log4perl.appender.Syncer.appender   = Logfile
+# log4perl.appender.Syncer            = Log::Log4perl::Appender::Synchronized
+# log4perl.appender.Syncer.appender   = Logfile
 
 log4perl.appender.stdout=Log::Log4perl::Appender::Screen
 log4j.appender.stdout.layout=SimpleLayout
 log4j.appender.stdout.utf8=1
-log4perl.appender.SyncerC            = Log::Log4perl::Appender::Synchronized
-log4perl.appender.SyncerC.appender   = stdout
+# log4perl.appender.SyncerC            = Log::Log4perl::Appender::Synchronized
+# log4perl.appender.SyncerC.appender   = stdout
 
 log4perl.logger.Beerhunter.RateBeerMaster=DEBUG
 log4perl.logger.Beerhunter.RateBeerCrawl=INFO
