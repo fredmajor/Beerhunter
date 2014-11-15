@@ -22,4 +22,7 @@ requires 'Encode';
 requires 'URI::Escape';
 requires 'HTML::TreeBuilder::LibXML';
 requires 'HTML::TreeBuilder::XPath';
+requires 'Alien::Tidyp';
 requires 'HTML::Tidy';
+requires 'IPC::Semaphore';
+requires 'ExtUtils::PkgConfig';
