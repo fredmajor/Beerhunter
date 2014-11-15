@@ -22,6 +22,17 @@ ENV PERLBREW_MANPATH /usr/local/perlbrew/perls/$TARGET_PERL/man
 ENV PERLBREW_PATH /usr/local/perlbrew/bin:/usr/local/perlbrew/perls/$TARGET_PERL/bin
 ENV PERLBREW_PERL $TARGET_PERL
 
+RUN cpanm Carton
+RUN git clone https://github.com/fredmajor/Beerhunter.git
+WORKDIR Beerhunter/code/BeerData
+RUN apt-get update &&  apt-get -y install  pkg-config  libcurl4-gnutls-dev
+RUN cpanm ExtUtils::PkgConfig
+# RUN cpanm  Net::Curl
+# RUN cpanm YADA
+
+RUN carton install
+
 RUN perlbrew info
 RUN perl -v
+RUN pwd
 
