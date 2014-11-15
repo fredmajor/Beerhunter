@@ -13,6 +13,7 @@ requires 'MongoDB';
 requires 'MongoDB::OID';
 requires 'Getopt::Long';
 requires 'Log::Log4perl', '1.46';
+requires 'Log::Log4perl::Appender::Synchronized';
 requires 'Archive::Zip', '1.39';
 requires 'MongoDB::GridFS';
 requires 'HTTP::Request';
