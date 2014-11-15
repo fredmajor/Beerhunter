@@ -3,6 +3,7 @@ NAME=mongodb
 if [ ! -d /data/beers ]; then
 	mkdir -p /data/beers
 fi
+docker pull dockerfile/mongodb
 docker build -t $NAME .
 IS_RUNNING=$(docker ps |grep $NAME | wc -l)
 echo "IS_RUNNING is $IS_RUNNING"

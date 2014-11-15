@@ -10,5 +10,5 @@ if [ "$IS_RUNNING" -gt "0" ]; then
         docker rm -f  $NAME
 fi
 
-export PERLY_CONT=$(docker run -ti --link mongodb:mongodb  --name $NAME  $NAME /bin/bash)
+export PERLY_CONT=$(docker run   --link mongodb:mongodb  --name $NAME  $NAME carton exec "perl RateBeerMaster.pl --mongourl="mongodb"" )
 echo "started $NAME container. container id is $PERLY_CONT"
