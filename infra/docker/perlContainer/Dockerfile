@@ -23,11 +23,10 @@ ENV PERLBREW_PATH /usr/local/perlbrew/bin:/usr/local/perlbrew/perls/$TARGET_PERL
 ENV PERLBREW_PERL $TARGET_PERL
 
 RUN apt-get update &&  apt-get -y install pkg-config libcurl4-gnutls-dev tidy libxml2 libxml2-dev
-RUN cpanm Carton ExtUtils::PkgConfig Alien::Tidyp
+RUN cpanm Carton ExtUtils::PkgConfig
 
 RUN git clone https://github.com/fredmajor/Beerhunter.git
 WORKDIR Beerhunter/code/BeerData
-RUN echo yo
 RUN carton install
 
 RUN perlbrew info
