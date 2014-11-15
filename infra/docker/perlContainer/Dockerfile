@@ -27,7 +27,7 @@ RUN cpanm Carton ExtUtils::PkgConfig Alien::Tidyp
 
 RUN git clone https://github.com/fredmajor/Beerhunter.git
 WORKDIR Beerhunter/code/BeerData
-
+RUN echo yo
 RUN carton install
 
 RUN perlbrew info
