@@ -1,0 +1,11 @@
+.DS_Store
+RbData/beers.txt
+RbData/berrList.zip
+RbData/*.html
+*.log
+*.swp
+*.komodoproject
+MenuCrawlers/out/*
+RbData/badLinks
+RbData/*.tmp
+

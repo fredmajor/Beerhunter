@@ -1,9 +1,4 @@
-# This software is Copyright (c) 2014 by Chris Weyl &lt;chris.weyl@wps.io&gt;
-#
-# This work is licensed under a Creative Commons Attribution-ShareAlike 4.0
-# International License (CC-BY-SA-4.0).
-#
-# http://creativecommons.org/licenses/by-sa/4.0/
+# Based on a container from rschboy repository on main docker hub, with my adjustments
 
 FROM rsrchboy/perlbrew-base:latest
 MAINTAINER Fred Major major.freddy@yahoo.com
@@ -25,11 +20,7 @@ ENV PERLBREW_PERL $TARGET_PERL
 RUN apt-get update &&  apt-get -y install pkg-config libcurl4-gnutls-dev tidy libxml2 libxml2-dev
 RUN cpanm Carton ExtUtils::PkgConfig
 
-RUN git clone https://github.com/fredmajor/Beerhunter.git
-WORKDIR Beerhunter/code/BeerData
 RUN carton install
 
 RUN perlbrew info
 RUN perl -v
-RUN pwd
-

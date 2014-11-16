@@ -363,6 +363,7 @@ sub initParsingEngine{
 
 sub handleResponses{
     my $myNo = shift;
+    $|=1;
     my $parser = Beerhunter::BeerData::RateBeerCrawl->new(); 
     my $client = MongoDB::MongoClient->new(host => "$mongoUrl:$mongoPort");
     my $beerDb=$client->get_database('beerDb');
