@@ -20,7 +20,5 @@ ENV PERLBREW_PERL $TARGET_PERL
 RUN apt-get update &&  apt-get -y install pkg-config libcurl4-gnutls-dev tidy libxml2 libxml2-dev
 RUN cpanm Carton ExtUtils::PkgConfig
 
-RUN carton install
-
 RUN perlbrew info
 RUN perl -v
