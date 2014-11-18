@@ -1,4 +1,4 @@
 *.komodoproject
 infra/.vagrant
-
+*.swp
 

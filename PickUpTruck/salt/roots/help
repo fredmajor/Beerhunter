@@ -1,0 +1,15 @@
+roots from here will be mounted as follows: 
+  "salt/roots/", "/srv/"
+so in master config we will have:
+
+file_roots:
+  base:
+    - /srv/salt/prod
+  qa:
+    - /srv/salt/qa
+    - /srv/salt/prod
+  dev:
+    - /srv/salt/dev
+    - /srv/salt/qa
+    - /srv/salt/prod
+
