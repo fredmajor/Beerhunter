@@ -10,8 +10,7 @@ qa:
     - basicutils
 
 dev:
-  'dev.beerhunter.pl  or G@role:rbGetDev  or rbDb*dev*':
-    - match: compound
+  'devVagrant':
     - docker
-    - rbGetter
-    #- basicutils
+    - dock_rbGetter
+

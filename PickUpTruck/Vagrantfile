@@ -1,18 +1,21 @@
-$memory = 1025
+$memory = 1024
 $cpus = 1
 $mongo_port = 27017
 $mongo_host = "193.168.1.2"
+$mName= "devVagrant"
 
 Vagrant.configure("2") do |config|
   ## Choose your base box
   config.vm.box = "hashicorp/precise64"
-  config.vm.hostname = "dev.beerhunter.pl"
+  config.vm.hostname = $mName
+  config.vm.box_url = "http://files.vagrantup.com/precise64.box"
   config.vm.network "private_network", ip:  $mongo_host
 
   config.vm.provider "virtualbox" do |v|
     v.memory = $memory
     v.cpus = $cpus
     v.gui = false
+    v.name = $mName
   end
 
   ## For masterless, mount your file roots file root

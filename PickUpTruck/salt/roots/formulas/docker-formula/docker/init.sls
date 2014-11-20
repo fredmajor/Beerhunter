@@ -8,6 +8,12 @@ docker-dependencies:
       - iptables
       - ca-certificates
       - lxc
+      - python-pip
+
+docker-py:
+  pip.installed:
+    - require:
+      - pkg: docker-dependencies
 
 docker_repo:
     pkgrepo.managed:
