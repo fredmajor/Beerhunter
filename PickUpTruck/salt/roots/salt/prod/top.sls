@@ -12,5 +12,5 @@ qa:
 dev:
   'devVagrant':
     - docker
-    - dock_rbGetter
+    - dock_rbdata
 
