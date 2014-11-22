@@ -10,9 +10,12 @@ rbdata-container:
   docker.installed:
     - name: rbdata
     - image: fredmajor/rbdata
+    - hostname: rbdata
     - require_in: rbdata
 
 rbdata:
-  docker.run:
+  docker.running:
     - container: rbdata
+    - name: rbdata
+    - image: fredmajor/rbdata
 

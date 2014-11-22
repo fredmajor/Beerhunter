@@ -1,7 +1,6 @@
 package Beerhunter::BeerData::RateBeerCrawl 0.01{
     use 5.018;
     use common::sense;
-#    use utf8::all;
     use Time::HiRes qw/time/;
     use Data::Dumper;
     use LWP::Simple;
@@ -35,6 +34,7 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
         return  $bData;
     }
 
+    #this one receives just raw text as one big string
     sub parse_html{
         my $self=shift;
         my $text=shift;
