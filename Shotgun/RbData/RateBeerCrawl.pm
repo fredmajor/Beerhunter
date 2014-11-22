@@ -149,20 +149,25 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
         }
 
         #origin
-        my $originPath=q(.//*[@id='container']/table//tr[2]/td[2]/div/table[1]//tr/td[2]/div[1]);
+        my $originPath=    q(.//*[@id='container']/table//tr[2]/td[2]/div/table[1]//tr/td[2]/div[1]);
         my $originPathText=q(.//*[@id='container']/table//tr[2]/td[2]/div/table[1]//tr/td[2]/div[1]/text());
+          #            q(.//*[@id='container']/span/table//tr[2]/td[2]/div/table[1]//tr/td[2]/div[1]/a[3]);
         my $origin;
         if($tree->exists($originPath)){
             my $originNode=$tree->findnodes($originPath)->[0];
-            my @linkTags=$originNode->look_down('_tag','a');
+            my @linkTags = $originNode->{node}->getChildrenByTagName("a");
+            #my @linkTags=$originNode->look_down('_tag','a');
+            #my @linkTags=$originNode->getChildrenByTagName("a");
             my $linksSize = @linkTags;
+            my $originPre  = join( ',', (map{$_->textContent} @linkTags));
             if($linksSize >= 2){
                 my $allDivText=$tree->findnodes_as_string($originPath);
                 if($allDivText=~/brewed at/i){
+                    shift @linkTags; shift @linkTags; shift @linkTags;
+                }else{
                     shift @linkTags;
                 }
-                shift @linkTags; shift @linkTags;
-                $origin  = join( ',', (map{$_->as_text} @linkTags));
+                $origin  = join( ',', (map{$_->textContent} @linkTags));
             }
             my $allTexts=$tree->findvalue($originPathText);
             $allTexts=~s/style\s*://gi;

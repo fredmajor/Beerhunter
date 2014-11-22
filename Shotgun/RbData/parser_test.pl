@@ -5,17 +5,18 @@ use FindBin;
 use lib $FindBin::Bin;
 require "RateBeerCrawl.pm";
 
-my $loops=100;
+my $loops=80;
 my @files = qw/
 1.html
 2.html
 3.html
+4.html
 /;
 
 my $parser = Beerhunter::BeerData::RateBeerCrawl->new(); 
 my $timer = time;
 my $filesNo = @files;
-my $parsedTime = $filesNo*$loops;
+my $parsedTime = $filesNo*($loops+1);
 
 say "running $parsedTime jobs.";
 $|=1;
@@ -28,7 +29,7 @@ for (0 .. $loops){
         my $parsed=$parser->parse_html($html);
         close FILE;
         print ".";
-#        say Dumper($parsed);
+        # say Dumper($parsed);
     }
 }
 print "\n";
