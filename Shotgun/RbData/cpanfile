@@ -28,3 +28,4 @@ requires 'HTML::Tidy';
 requires 'IPC::Semaphore';
 requires 'IPC::Shareable';
 requires 'ExtUtils::PkgConfig';
+requires 'YAML::Tiny';
