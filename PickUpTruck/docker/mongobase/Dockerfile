@@ -23,6 +23,9 @@ RUN curl -SL "https://fastdl.mongodb.org/linux/mongodb-linux-x86_64-$MONGO_VERSI
 VOLUME /data/db
 
 COPY docker-entrypoint.sh /entrypoint.sh
+RUN chown mongodb:mongodb /entrypoint.sh
+RUN chmod 711 /entrypoint.sh
+
 ENTRYPOINT ["/entrypoint.sh"]
 
 EXPOSE 27017
