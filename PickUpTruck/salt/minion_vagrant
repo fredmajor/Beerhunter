@@ -157,18 +157,15 @@ file_client: local
 file_roots:
   base:
     - /srv/salt/prod
-    - /srv/formulas/mongodb-formula
     - /srv/formulas/docker-formula
   qa:
     - /srv/salt/qa
     - /srv/salt/prod
-    - /srv/formulas/mongodb-formula
     - /srv/formulas/docker-formula
   dev:
     - /srv/salt/dev
     - /srv/salt/qa
     - /srv/salt/prod
-    - /srv/formulas/mongodb-formula
     - /srv/formulas/docker-formula
 
 # The hash_type is the hash to use when discovering the hash of a file in
