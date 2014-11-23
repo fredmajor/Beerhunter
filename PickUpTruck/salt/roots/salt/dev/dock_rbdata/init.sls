@@ -1,39 +1,63 @@
+{% set settings       = salt['pillar.get']('rbdata:settings', {}) %}
+{% set image          = salt['pillar.get']('rbdata:image', 'fredmajor/mongobase:latest') %}
+{% set name           = salt['pillar.get']('rbdata:contName', 'rbdata') %}
+{% set containerid    = salt['grains.get']('id') %}
+{% set port       = settings.get('port', '27017') %}
+{% set defaultIp  = grains['ip_interfaces']['eth1'][0] %}
+
 include:
   - docker
 
-rbdata-image:
+{{ name }}-image:
   docker.pulled:
-    - name: mongo:2.8.0
-    - require_in: rbdata-container
+    - name: {{ image }}
+    - require_in: {{ name }}-container
 
-rbdata-container:
+{{ name }}-container:
   docker.installed:
-    - name: rbdata
-    - image: mongo:2.8.0
-    - hostname: rbdata
-    - require_in: rbdata
+    - name: {{ name }}
+    - image: {{ image }}
+    - hostname: {{ containerid }}
+    - require_in: {{ name }}
 
-rbdata-data-path:
+mongodb:
+  group:
+    - present
+    - gid: {{ settings.get('mongo_guid', '1111') }}
+  user:
+    - present
+    - uid: {{ settings.get('mongo_uid', '1111') }}
+    - groups:
+      - mongodb
+    - require:
+      - group: mongodb
+    - require_in: {{ name }}-data-path
+
+{{ name }}-data-path:
   file.directory:
-    - name: {{ salt['pillar.get']('mongodb:settings:data_dir', '/data/db') }}
+    - name: {{ salt['pillar.get']('rbdata:settings:local_data_dir', '/data/db') }}
     - user: mongodb
     - group: mongodb
     - mode: 755
     - makedirs: True
-    - require_in: rbdata
+    - require_in: {{ name }}
+    - require:
+      - group: mongodb
+      - user: mongodb
     - recurse:
         - user
         - group
 
-rbdata:
+{{ name }}:
   docker.running:
-    - container: rbdata
-    - name: rbdata
-    - image: mongo:2.8.0
+    - container: {{ name }}
+    - name: {{ name }}
+    - image: {{ image }}
     - port_bindings:
         "27017/tcp":
-            HostIp: "{{ salt['pillar.get']('mongodb:settings:bind_ip', '127.0.0.1') }}"
-            HostPort: "{{ salt['pillar.get']('mongodb:settings:port', '27017') }}"
-    - volumes:
-      - {{ salt['pillar.get']('mongodb:settings:docker_mount_dir', '/data') }}: /data
-
+            HostIp: "{{ salt['pillar.get']('rbdata:settings:bind_ip', '127.0.0.1') }}"
+            HostPort: "{{ salt['pillar.get']('rbdata:settings:port', '27017') }}"
+    - binds:
+        {{ settings.get('docker_mount_dir', '/data/db') }}:
+            bind: /data/db
+            ro: False

@@ -34,11 +34,11 @@ Vagrant.configure("2") do |config|
 
     #export port and ip for mongodb server
     salt.pillar({
-      "mongodb" => {
+      "rbdata" => {
         "settings" => {
           "port" => $mongo_port,
           "bind_ip" => $mongo_host,
-          "data_dir" => $mongo_data
+          "local_data_dir" => $mongo_data
         }
       }
     })

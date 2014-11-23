@@ -24,7 +24,7 @@ VOLUME /data/db
 
 COPY docker-entrypoint.sh /entrypoint.sh
 RUN chown mongodb:mongodb /entrypoint.sh
-RUN chmod 711 /entrypoint.sh
+RUN chmod 744 /entrypoint.sh
 
 ENTRYPOINT ["/entrypoint.sh"]
 

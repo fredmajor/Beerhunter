@@ -12,6 +12,7 @@ docker-dependencies:
 
 docker-py:
   pip.installed:
+    - name: docker-py >= 0.6.0, <= 0.6.0
     - require:
       - pkg: docker-dependencies
 
