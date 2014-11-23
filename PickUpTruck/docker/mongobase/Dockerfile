@@ -1,7 +1,7 @@
 FROM debian:wheezy
 
-# add our user and group first to make sure their IDs get assigned consistently, regardless of whatever dependencies get added
-RUN groupadd -r mongodb && useradd -r -g mongodb mongodb
+# changed comparing to the standard image
+RUN groupadd -g 1111 mongodb && useradd  -g mongodb -u 1111 mongodb
 
 RUN apt-get update \
   && apt-get install -y curl \
