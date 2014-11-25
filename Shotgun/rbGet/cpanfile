@@ -9,6 +9,7 @@ requires 'IO::File';
 requires 'Data::Dumper';
 requires 'YADA';
 requires 'LWP::Simple';
+requires 'Mojo::UserAgent';
 requires 'Getopt::Long';
 requires 'Log::Log4perl', '1.46';
 requires 'Log::Log4perl::Appender::Synchronized';

@@ -30,6 +30,10 @@ package Beerhunter::BeerData::RateBeerCrawl 0.01{
         $logger->debug("Parsing $url");
         my $bData=$self->parseData($text);
         $bData->{"url"}=$url;
+        {
+            my $rbid = $1 if $url =~ /\/(\d+)\/$/;
+            $bData->{"rbid"}=$rbid if defined $rbid;
+        }
         $logger->debug("Parsed $url");
         return  $bData;
     }

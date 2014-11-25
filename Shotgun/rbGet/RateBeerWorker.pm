@@ -13,6 +13,7 @@ use IO::File;
 use Data::Dumper;
 use YADA;
 use LWP::Simple;
+use Mojo::UserAgent;
 use Getopt::Long;
 use Log::Log4perl;
 use POSIX;
@@ -82,6 +83,7 @@ our $bigBatchRatio=3;
 our $oldsource; #try to use  old beers.zip file if present
 our $syncPeriod=120; #will make sure that all responses are parsed and persisted in DB every at most 120s
 our $rbdataApiUrl="dev.beerhunter.pl";
+our $rbdataApiPort="3000";
 our $workersTotal=1;
 our $myWorkerNo=1;
 our $crawlTimestamp=ceil(time);
@@ -505,14 +507,28 @@ sub getBeersFile{
 sub insertToRbData{
     my $toInsert=shift;
     $|=1;
+
+    my $url = $rbdataApiUrl.":".$rbdataApiPort."/beer";
+    my $ua = Mojo::UserAgent->new;
+    my $tx = $ua->post( $url => form => $toInsert );
+    unless (my $res = $tx->success){
+        my $err = $tx->error;
+        $logger->warn("$err->{code} response: $err->{message}") if $err->{code};
+    }
 }
 
 sub insertBadLink{
     my $toInsert = shift;
     $|=1;
-    $logger->info("simulated badlink insert to rbData");
+    my $url = $rbdataApiUrl.":".$rbdataApiPort."/badurl";
+    my $ua = Mojo::UserAgent->new;
+    my $tx = $ua->post( $url => form => {bad => $toInsert} );
+    unless (my $res = $tx->success){
+        my $err = $tx->error;
+        $logger->warn("$err->{code} response: $err->{message}") if $err->{code};
+    }
+    $logger->info("badlink inserted to rbdata");
 }
-
 
 #sub getTimestamp{
 #    strftime("%Y-%m-%d_%H-%M-%S", localtime);

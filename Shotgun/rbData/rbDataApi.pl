@@ -1,46 +1,47 @@
 use 5.018;
 use common::sense;
 use utf8;
-use MongoDB;
-use MongoDB::OID;
-use MongoDB::GridFS;
 use Data::Dumper;
-use Log::Log4perl;
 use Getopt::Long;
 use Mojolicious::Lite;
-use Mojolicious::Plugin::Mongodb;
+use MongoDB;
 
-
-my $mongoHost="localhost";
+my $mongoHost="dev.beerhunter.pl";
 my $mongoPort="27017";
 my $apiRoot="";
 my $apiPort=3000;
 
 GetOptions('mongoHost:s'=> \$mongoHost, 'mongoPort:i'=>\$mongoPort, 
-            'apiRoot:s'=> \$apiRoot, 'apiPort:i' => \$apiPort);
+    'apiRoot:s'=> \$apiRoot, 'apiPort:i' => \$apiPort);
 
 my $myUrl="http://" . $apiRoot . "*:" . $apiPort;
 app->config(hypnotoad => {listen => [$myUrl]});
 
-#sub startup {
-#    my $self = shift;
-#    $self->plugin('mongodb', { 
-#            host => 'localhost',
-#            port => 27017,
-#            helper => 'db',
-#        });
-#}
+my $mongo = MongoDB::MongoClient->new(host => $mongoHost. ":" . $mongoPort);
+my $rbdata = $mongo->get_database('rbdata');
 
-plugin 'mongodb', { 
-    'host'      => $mongoHost,
-    'port'      => $mongoPort,
-    'helper'    => 'db',
-    };
+post '/badurl' => sub{
+    my $c = shift;
+    my $url = $c->param('bad');
+    $rbdata->get_collection('badurl')->insert({bad => $url});
+    $c->render(text => 'ok');
+};
 
-get '/' => {text => 'Hello Wor...ALL GLORY TO THE HYPNOTOAD!'};
+post '/beer' => sub{
+    my $c = shift;
+    my $beer = $c->req->params->to_hash;
+    $beer->{rbid}+=0;
+    $beer->{abv}+=0 if defined $beer->{abv};
+    $beer->{overallMark}+=0 if defined $beer->{overallMark};
+    $beer->{styleMark}+=0 if defined $beer->{styleMark};
+    $beer->{ratings}+=0 if defined $beer->{ratings};
+    $beer->{ibu}+=0 if defined $beer->{ibu};
+    $beer->{calories}+=0 if defined $beer->{calories};
+    $beer->{weightedAvg}+=0 if defined $beer->{weightedAvg};
+    $beer->{weightedAvg}+=0 if defined $beer->{weightedAvg};
+    $rbdata->get_collection('beer')->remove( {"rbid" => $beer->{rbid}} );
+    $rbdata->get_collection('beer')->insert($beer);
+    $c->render(text => 'ok');
+};
 
 app->start;
-
-
-
-
