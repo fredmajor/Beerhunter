@@ -17,12 +17,13 @@ GetOptions('mongoHost:s'=> \$mongoHost, 'mongoPort:i'=>\$mongoPort,
 my $myUrl="http://" . $apiRoot . "*:" . $apiPort;
 app->config(hypnotoad => {listen => [$myUrl]});
 
-my $mongo = MongoDB::MongoClient->new(host => $mongoHost. ":" . $mongoPort);
-my $rbdata = $mongo->get_database('rbdata');
+say "mongo host is: $mongoHost, mongo port is: $mongoPort";
 
 post '/badurl' => sub{
     my $c = shift;
     my $url = $c->param('bad');
+    my $mongo = MongoDB::MongoClient->new(host => $mongoHost. ":" . $mongoPort);
+    my $rbdata = $mongo->get_database('rbdata');
     $rbdata->get_collection('badurl')->insert({bad => $url});
     $c->render(text => 'ok');
 };
@@ -39,6 +40,8 @@ post '/beer' => sub{
     $beer->{calories}+=0 if defined $beer->{calories};
     $beer->{weightedAvg}+=0 if defined $beer->{weightedAvg};
     $beer->{weightedAvg}+=0 if defined $beer->{weightedAvg};
+    my $mongo = MongoDB::MongoClient->new(host => $mongoHost. ":" . $mongoPort);
+    my $rbdata = $mongo->get_database('rbdata');
     $rbdata->get_collection('beer')->remove( {"rbid" => $beer->{rbid}} );
     $rbdata->get_collection('beer')->insert($beer);
     $c->render(text => 'ok');
