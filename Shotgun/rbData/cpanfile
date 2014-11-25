@@ -1,11 +1,6 @@
 requires 'MongoDB';
-requires 'MongoDB::OID';
-requires 'MongoDB::GridFS';
 requires 'common::sense', '3.73' ;
 requires 'Data::Dumper';
-requires 'Log::Log4perl';
 requires 'Mojolicious';
 requires 'Mojolicious::Lite';
-requires 'Mojolicious::Plugin::Mongodb';
 requires 'Getopt::Long';
-

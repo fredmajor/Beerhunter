@@ -507,7 +507,6 @@ sub getBeersFile{
 sub insertToRbData{
     my $toInsert=shift;
     $|=1;
-
     my $url = $rbdataApiUrl.":".$rbdataApiPort."/beer";
     my $ua = Mojo::UserAgent->new;
     my $tx = $ua->post( $url => form => $toInsert );
