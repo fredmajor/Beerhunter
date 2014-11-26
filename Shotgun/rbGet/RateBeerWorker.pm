@@ -78,7 +78,7 @@ our $logger = Log::Log4perl->get_logger('Beerhunter.RateBeerMaster');
 
 #########################################
 ## Options
-our $batchsize=20; #currently ignored
+our $batchsize=20; 
 our $bigBatchRatio=3;
 our $oldsource; #try to use  old beers.zip file if present
 our $syncPeriod=120; #will make sure that all responses are parsed and persisted in DB every at most 120s
@@ -92,7 +92,7 @@ GetOptions('batchsize:i' => \$batchsize, 'oldsource'=>\$oldsource, 'rbdataApiUrl
     'workersTotal:i'=>\$workersTotal, 'myWorkerNo:i'=>\$myWorkerNo, 'crawlTimestamp:s'=>\$crawlTimestamp, 
     'newRun:i'=> \$newRun, 'bigBatchRatio:i'=>\$bigBatchRatio);
 $logger->info("batchsize: $batchsize, oldsource: $oldsource, rbdataApiUrl: $rbdataApiUrl, workersTotal: $workersTotal,
-    myWorkerNo: $myWorkerNo, crawlTimestamp: $crawlTimestamp, newRun: $newRun");
+    myWorkerNo: $myWorkerNo, crawlTimestamp: $crawlTimestamp, newRun: $newRun, bigBatchRatio: $bigBatchRatio");
 
 my $worker = new();
 $worker->start();
