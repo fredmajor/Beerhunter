@@ -88,11 +88,11 @@ our $workersTotal=1;
 our $myWorkerNo=1;
 our $crawlTimestamp=ceil(time);
 our $newRun=1; #if specified, starts it's work from the beggining. If not, tries to pick up last crawl 
-GetOptions('batchsize:i' => \$batchsize, 'oldsource'=>\$oldsource, 'rbdataApiUrl:s'=>\$rbdataApiUrl,
-    'workersTotal:i'=>\$workersTotal, 'myWorkerNo:i'=>\$myWorkerNo, 'crawlTimestamp:s'=>\$crawlTimestamp, 
-    'newRun:i'=> \$newRun, 'bigBatchRatio:i'=>\$bigBatchRatio);
-$logger->info("batchsize: $batchsize, oldsource: $oldsource, rbdataApiUrl: $rbdataApiUrl, workersTotal: $workersTotal,
-    myWorkerNo: $myWorkerNo, crawlTimestamp: $crawlTimestamp, newRun: $newRun, bigBatchRatio: $bigBatchRatio");
+GetOptions('batchsize:i' => \$batchsize, 'oldsource'=>\$oldsource, 'rbdataapiurl:s'=>\$rbdataApiUrl,
+    'workerstotal:i'=>\$workersTotal, 'myworkerno:i'=>\$myWorkerNo, 'crawltimestamp:s'=>\$crawlTimestamp, 
+    'newrun:i'=> \$newRun, 'bigbatchratio:i'=>\$bigBatchRatio);
+$logger->info("batchsize: $batchsize, oldsource: $oldsource, rbdataapiurl: $rbdataApiUrl, workerstotal: $workersTotal,
+    myworkerno: $myWorkerNo, crawltimestamp: $crawlTimestamp, newrun: $newRun, bigbatchratio: $bigBatchRatio");
 
 my $worker = new();
 $worker->start();

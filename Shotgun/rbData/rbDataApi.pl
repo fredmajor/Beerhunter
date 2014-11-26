@@ -11,8 +11,8 @@ my $mongoPort="27017";
 my $apiRoot="";
 my $apiPort=3000;
 
-GetOptions('mongoHost:s'=> \$mongoHost, 'mongoPort:i'=>\$mongoPort, 
-    'apiRoot:s'=> \$apiRoot, 'apiPort:i' => \$apiPort);
+GetOptions('mongohost:s'=> \$mongoHost, 'mongoport:i'=>\$mongoPort, 
+    'apiroot:s'=> \$apiRoot, 'apiport:i' => \$apiPort);
 
 my $myUrl="http://" . $apiRoot . "*:" . $apiPort;
 app->config(hypnotoad => {listen => [$myUrl]});
