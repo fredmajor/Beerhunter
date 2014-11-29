@@ -1,6 +1,6 @@
-rbdata:
+rbdata-storage:
   image: "fredmajor/mongobase:latest"
-  contName: "rbdata"
+  contName: "rbdata-storage"
   settings:
     port: "27017"
     bind_ip: "193.168.1.2"

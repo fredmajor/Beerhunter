@@ -12,5 +12,7 @@ qa:
 dev:
   'devVagrant':
     - docker
-    - dock_rbdata
+    - rbdata-storage-docker
+    - rbdata-api-docker
+    #    - rbget-docker
 

@@ -1,8 +1,7 @@
-{% set settings       = salt['pillar.get']('rbdata:settings', {}) %}
-{% set image          = salt['pillar.get']('rbdata:image', 'fredmajor/mongobase:latest') %}
-{% set name           = salt['pillar.get']('rbdata:contName', 'rbdata') %}
+{% set settings       = salt['pillar.get']('rbdata-storage:settings', {}) %}
+{% set image          = salt['pillar.get']('rbdata-storage:image', 'fredmajor/mongobase:latest') %}
+{% set name           = salt['pillar.get']('rbdata-storage:contName', 'rbdata-storage') %}
 {% set containerid    = salt['grains.get']('id') %}
-{% set port       = settings.get('port', '27017') %}
 {% set defaultIp  = grains['ip_interfaces']['eth1'][0] %}
 
 include:
@@ -35,7 +34,7 @@ mongodb:
 
 {{ name }}-data-path:
   file.directory:
-    - name: {{ salt['pillar.get']('rbdata:settings:local_data_dir', '/data/db') }}
+    - name: {{ settings.get('local_data_dir', '/data/db') }}
     - user: mongodb
     - group: mongodb
     - mode: 755
@@ -55,8 +54,8 @@ mongodb:
     - image: {{ image }}
     - port_bindings:
         "27017/tcp":
-            HostIp: "{{ salt['pillar.get']('rbdata:settings:bind_ip', '127.0.0.1') }}"
-            HostPort: "{{ salt['pillar.get']('rbdata:settings:port', '27017') }}"
+            HostIp: "{{ settings.get('bind_ip', '127.0.0.1') }}"
+            HostPort: "{{ settings.get('port', '27017') }}"
     - binds:
         {{ settings.get('docker_mount_dir', '/data/db') }}:
             bind: /data/db
