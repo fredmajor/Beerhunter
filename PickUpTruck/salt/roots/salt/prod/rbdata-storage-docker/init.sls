@@ -7,6 +7,7 @@
 {% else %}
 {% set defaultIp  = grains['ip_interfaces']['eth0'][0] %}
 {% endif %}
+{% set env = pillar.get('shotgun_role', '') %}
 {% set  tag = settings.get('tag', 'latest') %}
 
 include:
@@ -55,6 +56,7 @@ mongodb:
       - group: mongodb
     - require_in: {{ name }}-data-path
 
+{% if env == "dev" %}
 {{ name }}-data-path:
   file.directory:
     - name: {{ settings.get('local_data_dir', '/data/db') }}
@@ -69,6 +71,7 @@ mongodb:
     - recurse:
         - user
         - group
+{% endif %}
 
 {{ name }}:
   docker.running:
@@ -77,9 +80,11 @@ mongodb:
     - image: {{ image }}
     - port_bindings:
         "27017/tcp":
-            HostIp: "{{ settings.get('bind_ip', '127.0.0.1') }}"
+            HostIp: "{{ defaultIp }}"
             HostPort: "{{ settings.get('port', '27017') }}"
+{% if env == "dev" %}
     - binds:
         {{ settings.get('docker_mount_dir', '/data/db') }}:
             bind: /data/db
             ro: False
+{% endif %}

@@ -10,9 +10,11 @@
 {% set mongo_state_name = salt['pillar.get']('rbdata-api:mongo_state_name','rbdata-storage') %}
 {% set apiport = settings.get('api_bind_port', '3000') %}
 {% set  tag = settings.get('tag', 'latest') %}
+{% set env = pillar.get('shotgun_role', '') %}
 
 include:
   - docker
+  - {{ mongo_state_name }}-docker
 
 {{ name }}-image:
   docker.pulled:
@@ -53,11 +55,9 @@ include:
     - container: {{ name }}
     - name: {{ name }}
     - image: {{ image }}
-    - require: 
-      - sls: {{ mongo_state_name }}-docker
     - port_bindings:
         "{{ apiport }}/tcp":
-            HostIp: "{{ settings.get('api_bind_ip', '127.0.0.1') }}"
+            HostIp: "{{ defaultIp }}"
             HostPort: "{{ apiport }}"
     - links:
         {{ settings.get('mongo_host', 'rbdata-storage') }}: {{ settings.get('mongo_host', 'rbdata-storage') }}
