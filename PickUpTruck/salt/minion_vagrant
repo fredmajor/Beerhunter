@@ -179,13 +179,16 @@ file_roots:
 pillar_roots:
   base:
     - /srv/pillar/prod
+    - /srv/pillar
   qa:
     - /srv/pillar/qa
     - /srv/pillar/prod
+    - /srv/pillar
   dev:
     - /srv/pillar/qa
     - /srv/pillar/prod
     - /srv/pillar/dev
+    - /srv/pillar
 
 
 ######        Security settings       #####

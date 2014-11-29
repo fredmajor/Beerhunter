@@ -19,6 +19,11 @@ app->config(hypnotoad => {listen => [$myUrl]});
 
 say "mongo host is: $mongoHost, mongo port is: $mongoPort";
 
+get '/' => sub{
+    my $c = shift;
+    $c->render(text => 'ALL GLORY TO THE HYPNOTOAD!!');
+}
+
 post '/badurl' => sub{
     my $c = shift;
     my $url = $c->param('bad');
