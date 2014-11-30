@@ -24,7 +24,7 @@ include:
     - name: docker.stop
     - container: "{{ name }}"
     - timeout: 30
-    - unless: docker inspect --format {{ '{{' }} .Image {{ '}}' }} {{ name }} | grep $(docker images --no-trunc | grep "fredmajor/{{ image }}" | grep "{{ tag }}" | awk '{ print $3 }')
+    - unless: docker inspect --format '{{ '{{' }} .Image {{ '}}' }}' {{ name }} | grep $(docker images --no-trunc | grep "fredmajor/{{ image }}" | grep "{{ tag }}" | awk '{ print $3 }')
     - require:
       - docker: {{ name }}-image
 
@@ -32,7 +32,7 @@ include:
   module.run:
     - name: docker.kill
     - container: "{{ name }}"
-    - unless: docker inspect --format {{ '{{' }} .Image {{ '}}' }} {{ name }} | grep $(docker images --no-trunc | grep "fredmajor/{{ image }}" | grep "{{ tag }}" | awk '{ print $3 }')
+    - unless: docker inspect --format '{{ '{{' }} .Image {{ '}}' }}' {{ name }} | grep $(docker images --no-trunc | grep "fredmajor/{{ image }}" | grep "{{ tag }}" | awk '{ print $3 }')
     - require:
       - module: {{ name }}-stop-if-old
 

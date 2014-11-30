@@ -1,26 +1,25 @@
-{% set settings       = salt['pillar.get']('rbdata-api:settings', {}) %}
-{% set image          = salt['pillar.get']('rbdata-api:image', 'fredmajor/rbdata:latest') %}
-{% set name           = salt['pillar.get']('rbdata-api:contName', 'rbdata-api') %}
+{% set settings       = salt['pillar.get']('rbget:settings', {}) %}
+{% set image          = salt['pillar.get']('rbget:image', 'fredmajor/rbget') %}
+{% set tag            = salt['pillar.get']('rbget:tag', 'latest') %}
+{% set name           = salt['pillar.get']('rbget:contName', 'rbget') %}
 {% set containerid    = salt['grains.get']('id') %}
-{% if pillar.get('shotgun_role') ==  "dev" %}
+{% set env = pillar.get('shotgun_role', '') %}
+
+{% if pillar.get('shotgun_role', '') == "dev" %}
 {% set defaultIp  = grains['ip_interfaces']['eth1'][0] %}
-{% else  %}
+{% else %}
 {% set defaultIp  = grains['ip_interfaces']['eth0'][0] %}
 {% endif %}
-{% set mongo_state_name = salt['pillar.get']('rbdata-api:mongo_state_name','rbdata-storage') %}
-{% set apiport = settings.get('api_bind_port', '3000') %}
-{% set  tag = settings.get('tag', 'latest') %}
-{% set env = pillar.get('shotgun_role', '') %}
 
 include:
   - docker
-  - {{ mongo_state_name }}-docker
 
 {{ name }}-image:
   docker.pulled:
     - name: {{ image }}
-    - require_in: {{ name }}-container
+    - tag: {{ tag }}
     - force: True
+    - require_in: {{ name }}-container
 
 {{ name }}-stop-if-old:
   module.run:
@@ -45,19 +44,16 @@ include:
     - image: {{ image }}
     - hostname: {{ containerid }}
     - command:
-      - "--mongoport={{ settings.get('mongo_port', '27017') }}" 
-      - "--mongohost={{ settings.get('mongo_host', 'rbdata-storage') }}"
-      - "--apiport={{ apiport }}"
+      - "--workerstotal={{ settings.get('workers_total', '1') }}"
+      - "--myworkerno={{ settings.get('my_worker_no', '1') }}"
+      - "--batchsize={{ settings.get('batch_size', '20') }}"
+      - "--bigbatchratio={{ settings.get('big_batch_ratio', '10') }}"
+      - "--rbdataapiurl={{ settings.get('rbdata_api_url', defaultIp ) }}"
     - require_in: {{ name }}
 
 {{ name }}:
   docker.running:
-    - container: {{ name }}
     - name: {{ name }}
+    - container: {{ name }}
     - image: {{ image }}
-    - port_bindings:
-        "{{ apiport }}/tcp":
-            HostIp: ""
-            HostPort: "{{ apiport }}"
-    - links:
-        {{ settings.get('mongo_host', 'rbdata-storage') }}: {{ settings.get('mongo_host', 'rbdata-storage') }}
+
