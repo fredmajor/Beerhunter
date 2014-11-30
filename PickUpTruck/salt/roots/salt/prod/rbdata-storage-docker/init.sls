@@ -78,11 +78,11 @@ mongodb:
     - container: {{ name }}
     - name: {{ name }}
     - image: {{ image }}
+{% if env == "dev" %}
     - port_bindings:
         "27017/tcp":
             HostIp: "{{ defaultIp }}"
             HostPort: "{{ settings.get('port', '27017') }}"
-{% if env == "dev" %}
     - binds:
         {{ settings.get('docker_mount_dir', '/data/db') }}:
             bind: /data/db

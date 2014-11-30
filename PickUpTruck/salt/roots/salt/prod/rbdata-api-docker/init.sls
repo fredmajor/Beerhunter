@@ -57,7 +57,7 @@ include:
     - image: {{ image }}
     - port_bindings:
         "{{ apiport }}/tcp":
-            HostIp: "{{ defaultIp }}"
+            HostIp: ""
             HostPort: "{{ apiport }}"
     - links:
         {{ settings.get('mongo_host', 'rbdata-storage') }}: {{ settings.get('mongo_host', 'rbdata-storage') }}
