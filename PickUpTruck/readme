@@ -1,0 +1,4 @@
+To start the fun execute:
+salt-call state.highstate -l debug
+salt-call state.sls rbget-docker qa -l debug
+
