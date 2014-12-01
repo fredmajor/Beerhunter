@@ -87,7 +87,7 @@ our $rbdataApiPort="3000";
 our $workersTotal=1;
 our $myWorkerNo=1;
 our $crawlTimestamp=ceil(time);
-our $newRun=1; #if specified, starts it's work from the beggining. If not, tries to pick up last crawl 
+our $newRun=0; #if specified, starts it's work from the beggining. If not, tries to pick up last crawl 
 GetOptions('batchsize:i' => \$batchsize, 'oldsource'=>\$oldsource, 'rbdataapiurl:s'=>\$rbdataApiUrl,
     'workerstotal:i'=>\$workersTotal, 'myworkerno:i'=>\$myWorkerNo, 'crawltimestamp:s'=>\$crawlTimestamp, 
     'newrun:i'=> \$newRun, 'bigbatchratio:i'=>\$bigBatchRatio);
